@@ -10,7 +10,8 @@ async def async_setup(hass: core.HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry) -> bool:
     """Set up Dooya RS485 from a config entry."""
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry.data
-    hass.config_entries.async_setup_platforms(entry, ["cover"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["cover"])
+
     return True
 
 async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry) -> bool:
