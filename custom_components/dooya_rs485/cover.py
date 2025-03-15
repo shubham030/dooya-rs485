@@ -1,10 +1,5 @@
 import logging
-from homeassistant.components.cover import (
-    CoverEntity,
-    SUPPORT_OPEN,
-    SUPPORT_CLOSE,
-    SUPPORT_STOP,
-)
+from homeassistant.components.cover import CoverEntity, CoverEntityFeature
 from homeassistant.const import STATE_CLOSED, STATE_CLOSING, STATE_OPENING, STATE_OPEN
 from .const import DOMAIN
 from .dooya_rs485 import DooyaController
@@ -44,7 +39,7 @@ class DooyaCover(CoverEntity):
     @property
     def supported_features(self):
         """Flag supported features."""
-        return SUPPORT_OPEN | SUPPORT_CLOSE | SUPPORT_STOP
+        return CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
 
     @property
     def is_closed(self):
