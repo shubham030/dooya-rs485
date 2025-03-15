@@ -7,7 +7,7 @@ from homeassistant.components.cover import (
 )
 from homeassistant.const import STATE_CLOSED, STATE_CLOSING, STATE_OPENING, STATE_OPEN
 from .const import DOMAIN
-from .dooya_motor import DooyaController
+from .dooya_rs485 import DooyaController
 
 _LOGGER = logging.getLogger(__name__)
 

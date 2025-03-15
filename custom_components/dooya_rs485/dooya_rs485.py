@@ -16,7 +16,12 @@ class DooyaController:
         # Initialize serial connection
         self.serial = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Connect to the TCP server
-        self.serial.connect((self.tcp_address, self.tcp_port))
+        try:
+            self.serial.connect((self.tcp_address, self.tcp_port))
+        except socket.error as e:
+            _LOGGER.error(f"Failed to connect to {self.tcp_address}:{self.tcp_port} - {e}")
+            raise
+
 
     async def open(self):
         """Open the curtain."""

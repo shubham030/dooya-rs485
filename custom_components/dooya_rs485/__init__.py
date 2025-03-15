@@ -18,5 +18,6 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, ["cover"])
     if unload_ok:
+        hass.data[DOMAIN][entry.entry_id]["controller"].serial.close()
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
