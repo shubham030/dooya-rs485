@@ -1,43 +1,20 @@
-"""Support for controlling Dooya curtain motor."""
-import voluptuous as vol
-import homeassistant.helpers.config_validation as cv
 import logging
-
 from homeassistant.components.cover import (
     CoverEntity,
     SUPPORT_OPEN,
     SUPPORT_CLOSE,
     SUPPORT_STOP,
-    PLATFORM_SCHEMA,
 )
 from homeassistant.const import STATE_CLOSED, STATE_CLOSING, STATE_OPENING, STATE_OPEN
-
-
 from .const import DOMAIN
 from .dooya_motor import DooyaController
 
-def validate_device_id(value):
-    """Validate that the value is a valid device ID (integer between 0 and 255)."""
-    if not isinstance(value, int):
-        raise vol.Invalid("Invalid value. Must be an integer.")
-    if value < 0 or value > 255:
-        raise vol.Invalid("Invalid value. Must be between 0 and 255.")
-    return value
-
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-        vol.Required("platform"): "dooya_motor",
-        vol.Required("tcp_port"): cv.port,
-        vol.Required("tcp_address"): cv.string,
-        vol.Required("device_id_l"): validate_device_id,
-        vol.Required("device_id_h"): validate_device_id,
-    })
-
 _LOGGER = logging.getLogger(__name__)
 
-async def setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up the Dooya cover platform."""
-    _LOGGER.error(config)
-    async_add_entities([DooyaCover(config)])
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up Dooya curtain cover from a config entry."""
+    data = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities([DooyaCover(data)])
 
 
 class DooyaCover(CoverEntity):
@@ -70,10 +47,9 @@ class DooyaCover(CoverEntity):
         return SUPPORT_OPEN | SUPPORT_CLOSE | SUPPORT_STOP
 
     @property
-    async def is_closed(self):
+    def is_closed(self):
         """Return if the cover is closed."""
         return self._state == STATE_CLOSED
-
 
     @property
     def is_opening(self):
@@ -89,15 +65,18 @@ class DooyaCover(CoverEntity):
         """Open the cover."""
         await self._controller.open()
         self._state = STATE_OPEN
+        self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs):
         """Close the cover."""
         await self._controller.close()
         self._state = STATE_CLOSED
+        self.async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs):
         """Stop the cover."""
         await self._controller.stop()
+        self.async_write_ha_state()
 
     async def async_update(self):
         """Update the cover state."""

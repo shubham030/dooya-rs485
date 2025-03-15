@@ -4,7 +4,6 @@ import binascii
 
 from const import *
 
-
 class DooyaController:
     """Class to control Dooya curtain motor."""
 
