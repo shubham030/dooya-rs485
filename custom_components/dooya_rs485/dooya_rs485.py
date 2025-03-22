@@ -88,14 +88,26 @@ class DooyaController:
             
             if response is None or len(response) < 6:
                 _LOGGER.error("Invalid response received from device")
-                return 255  # Return unknown position
+                return None
                 
             position = response[5]
+            _LOGGER.debug("Raw position from device: 0x%02X", position)
+            
+            # Handle case where stroke is not set (0xFF)
+            if position == 0xFF:
+                _LOGGER.warning("Device reports stroke is not set")
+                return None
+                
+            # Position should be between 0x00 (fully closed) and 0x64 (fully open)
+            if position > 0x64:
+                _LOGGER.error("Invalid position value received: 0x%02X", position)
+                return None
+                
             _LOGGER.debug("Cover position read: %d%%", position)
             return position
         except Exception as e:
             _LOGGER.error("Error reading cover position: %s", e)
-            return 255  # Return unknown position
+            return None
 
     async def read_cover_direction(self):
         """Read the cover direction."""
@@ -169,3 +181,93 @@ class DooyaController:
                 else:
                     crc >>= 1
         return crc.to_bytes(2, byteorder='little')
+
+    async def read_motor_status(self):
+        """Read the motor status."""
+        try:
+            _LOGGER.debug("Reading motor status")
+            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_MOTOR_STATUS, 0x01])
+            response = await self.send_rs485_command(rs485_command)
+            
+            if response is None or len(response) < 6:
+                _LOGGER.error("Invalid response received from device")
+                return None
+                
+            status = response[5]
+            _LOGGER.debug("Motor status read: 0x%02X", status)
+            return status
+        except Exception as e:
+            _LOGGER.error("Error reading motor status: %s", e)
+            return None
+
+    async def read_switch_status(self):
+        """Read both active and passive switch status."""
+        try:
+            _LOGGER.debug("Reading switch status")
+            active_cmd = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_SWITCH_ACTIVE, 0x01])
+            passive_cmd = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_SWITCH_PASSIVE, 0x01])
+            
+            active_response = await self.send_rs485_command(active_cmd)
+            passive_response = await self.send_rs485_command(passive_cmd)
+            
+            if active_response is None or passive_response is None or len(active_response) < 6 or len(passive_response) < 6:
+                _LOGGER.error("Invalid response received from device")
+                return None, None
+                
+            active_status = active_response[5]
+            passive_status = passive_response[5]
+            _LOGGER.debug("Switch status read - Active: 0x%02X, Passive: 0x%02X", active_status, passive_status)
+            return active_status, passive_status
+        except Exception as e:
+            _LOGGER.error("Error reading switch status: %s", e)
+            return None, None
+
+    async def read_version(self):
+        """Read the device version."""
+        try:
+            _LOGGER.debug("Reading device version")
+            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_VERSION, 0x01])
+            response = await self.send_rs485_command(rs485_command)
+            
+            if response is None or len(response) < 6:
+                _LOGGER.error("Invalid response received from device")
+                return None
+                
+            version = response[5]
+            _LOGGER.debug("Device version read: 0x%02X", version)
+            return version
+        except Exception as e:
+            _LOGGER.error("Error reading device version: %s", e)
+            return None
+
+    async def read_handle_status(self):
+        """Read the handle status."""
+        try:
+            _LOGGER.debug("Reading handle status")
+            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_HANDLE, 0x01])
+            response = await self.send_rs485_command(rs485_command)
+            
+            if response is None or len(response) < 6:
+                _LOGGER.error("Invalid response received from device")
+                return None
+                
+            status = response[5]
+            _LOGGER.debug("Handle status read: 0x%02X", status)
+            return status
+        except Exception as e:
+            _LOGGER.error("Error reading handle status: %s", e)
+            return None
+
+    async def reset(self):
+        """Reset the device."""
+        _LOGGER.debug("Sending reset command")
+        rs485_command = bytes([CURTAIN_COMMAND, CURTAIN_COMMAND_RESET])
+        response = await self.send_rs485_command(rs485_command)
+        return response
+
+    async def delete(self):
+        """Delete the device configuration."""
+        _LOGGER.debug("Sending delete command")
+        rs485_command = bytes([CURTAIN_COMMAND, CURTAIN_COMMAND_DELETE])
+        response = await self.send_rs485_command(rs485_command)
+        return response
