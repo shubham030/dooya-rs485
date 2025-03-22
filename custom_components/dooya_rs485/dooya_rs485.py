@@ -22,6 +22,10 @@ from .const import (
     CURTAIN_READ_WRITE_SWITCH_PASSIVE,
     CURTAIN_READ_WRITE_SWITCH_ACTIVE,
     CURTAIN_READ_WRITE_VERSION,
+    DEVICE_ADDRESS_SLAVE_REQUEST,
+    DEVICE_ADDRESS_WRITE,
+    DEVICE_ADDRESS_DATA_ADDR,
+    DEVICE_ADDRESS_DATA_LENGTH,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -378,3 +382,95 @@ class DooyaController:
         rs485_command = bytes([CURTAIN_COMMAND, CURTAIN_COMMAND_DELETE])
         response = await self.send_rs485_command(rs485_command)
         return response
+
+    async def program_device_address(self, new_id_l: int, new_id_h: int) -> bool:
+        """Program new device address after button is pressed and held.
+        
+        Args:
+            new_id_l: New low byte device ID (cannot be 0x00 or 0xFF)
+            new_id_h: New high byte device ID (cannot be 0x00 or 0xFF)
+        
+        Returns:
+            bool: True if programming was successful
+        """
+        _LOGGER.info(
+            "Programming new device address: ID_L=0x%02X, ID_H=0x%02X",
+            new_id_l,
+            new_id_h
+        )
+        
+        # Validate address bytes
+        if new_id_l in (0x00, 0xFF) or new_id_h in (0x00, 0xFF):
+            _LOGGER.error("Invalid address bytes. Cannot be 0x00 or 0xFF")
+            return False
+
+        try:
+            # Wait for slave request (0x04) after button press
+            # Default address (0xFEFE) + Function (0x04) + Data addr (0x01)
+            expected_request = bytes([
+                START_CODE,
+                0xFE, 0xFE,
+                DEVICE_ADDRESS_SLAVE_REQUEST,
+                0x01
+            ])
+            
+            # Listen for the request for up to 10 seconds
+            start_time = asyncio.get_event_loop().time()
+            while (asyncio.get_event_loop().time() - start_time) < 10:
+                try:
+                    response = await asyncio.wait_for(
+                        self._reader.read(1024),
+                        timeout=1.0
+                    )
+                    if response and response.startswith(expected_request):
+                        _LOGGER.debug("Received slave programming request")
+                        break
+                except asyncio.TimeoutError:
+                    continue
+            else:
+                _LOGGER.error("Timeout waiting for slave programming request")
+                return False
+
+            # Send write address command
+            command = bytes([
+                START_CODE,
+                0x00, 0x00,    # Use 0x0000 when programming
+                DEVICE_ADDRESS_WRITE,
+                DEVICE_ADDRESS_DATA_ADDR,
+                DEVICE_ADDRESS_DATA_LENGTH,
+                new_id_l,
+                new_id_h
+            ])
+            
+            # Add CRC
+            crc = self.calculate_crc(command)
+            command += crc
+            
+            _LOGGER.debug(
+                "Sending address programming command: %s",
+                binascii.hexlify(command).decode()
+            )
+            
+            self._writer.write(command)
+            await self._writer.drain()
+            
+            # Wait for confirmation response
+            try:
+                response = await asyncio.wait_for(
+                    self._reader.read(1024),
+                    timeout=5.0
+                )
+                if response:
+                    _LOGGER.info("Address programming successful")
+                    # Update controller's stored address
+                    self.device_id_l = new_id_l
+                    self.device_id_h = new_id_h
+                    return True
+            except asyncio.TimeoutError:
+                _LOGGER.error("Timeout waiting for programming confirmation")
+            
+            return False
+            
+        except Exception as e:
+            _LOGGER.error("Error during address programming: %s", e)
+            return False

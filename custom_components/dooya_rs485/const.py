@@ -51,3 +51,9 @@ SUPPORTED_FEATURES = (
     CoverEntityFeature.CLOSE |
     CoverEntityFeature.STOP
 )
+
+# Device Address Programming
+DEVICE_ADDRESS_SLAVE_REQUEST = 0x04  # Slave request command for address programming
+DEVICE_ADDRESS_WRITE = 0x02          # Write address command
+DEVICE_ADDRESS_DATA_ADDR = 0x00      # Data address for device address
+DEVICE_ADDRESS_DATA_LENGTH = 0x02    # Data length for address (2 bytes)

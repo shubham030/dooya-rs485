@@ -13,6 +13,8 @@ from homeassistant.const import (
     STATE_OPEN,
     STATE_UNKNOWN,
 )
+from homeassistant.helpers import entity_platform
+import voluptuous as vol
 
 from .const import DOMAIN, SUPPORTED_FEATURES, STATE_ERROR
 
@@ -40,6 +42,22 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][entry.entry_id]
     _LOGGER.info("Setting up cover entity with name: %s", data["data"]["name"])
     async_add_entities([DooyaCover(data["controller"], data["data"]["name"])])
+
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        "program_address",
+        {
+            vol.Required("address_low"): vol.All(
+                vol.Coerce(int),
+                vol.Range(min=1, max=254)
+            ),
+            vol.Required("address_high"): vol.All(
+                vol.Coerce(int),
+                vol.Range(min=1, max=254)
+            ),
+        },
+        "async_program_address"
+    )
 
 
 class DooyaCover(CoverEntity):
@@ -265,3 +283,21 @@ class DooyaCover(CoverEntity):
                     self._error_count = 0
                 except Exception as reset_err:
                     _LOGGER.error("Error resetting device: %s", reset_err)
+
+    async def async_program_address(self, address_low: int, address_high: int) -> None:
+        """Program new device address."""
+        try:
+            success = await self._controller.program_device_address(
+                address_low,
+                address_high
+            )
+            if success:
+                _LOGGER.info(
+                    "Successfully programmed new address: 0x%02X%02X",
+                    address_high,
+                    address_low
+                )
+            else:
+                _LOGGER.error("Failed to program new address")
+        except Exception as err:
+            _LOGGER.error("Error programming address: %s", err)
