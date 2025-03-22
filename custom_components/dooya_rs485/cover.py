@@ -2,29 +2,23 @@ import logging
 from homeassistant.components.cover import CoverEntity, CoverEntityFeature
 from homeassistant.const import STATE_CLOSED, STATE_CLOSING, STATE_OPENING, STATE_OPEN
 from .const import DOMAIN
-from .dooya_rs485 import DooyaController
 
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Dooya curtain cover from a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([DooyaCover(data)])
+    async_add_entities([DooyaCover(data["controller"], data["data"]["name"])])
 
 
 class DooyaCover(CoverEntity):
     """Representation of a Dooya cover."""
 
-    def __init__(self, config):
+    def __init__(self, controller, name):
         """Initialize the cover."""
-        self._name = "Dooya Curtain"
+        self._name = name
         self._state = STATE_OPEN
-        self._controller = DooyaController(
-            tcp_port=config["tcp_port"],
-            tcp_address=config["tcp_address"],
-            device_id_l=config["device_id_l"],
-            device_id_h=config["device_id_h"],
-        )
+        self._controller = controller
 
     @property
     def name(self):
