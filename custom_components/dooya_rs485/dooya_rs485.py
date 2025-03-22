@@ -4,7 +4,25 @@ import socket
 import binascii
 import logging
 
-from .const import *
+from .const import (
+    START_CODE,
+    CURTAIN_READ,
+    CURTAIN_WRITE,
+    CURTAIN_COMMAND,
+    CURTAIN_COMMAND_OPEN,
+    CURTAIN_COMMAND_CLOSE,
+    CURTAIN_COMMAND_STOP,
+    CURTAIN_COMMAND_PERCENT,
+    CURTAIN_COMMAND_DELETE,
+    CURTAIN_COMMAND_RESET,
+    CURTAIN_READ_WRITE_PERCENT,
+    CURTAIN_READ_WRITE_DIRECTION,
+    CURTAIN_READ_WRITE_HANDLE,
+    CURTAIN_READ_WRITE_MOTOR_STATUS,
+    CURTAIN_READ_WRITE_SWITCH_PASSIVE,
+    CURTAIN_READ_WRITE_SWITCH_ACTIVE,
+    CURTAIN_READ_WRITE_VERSION,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -151,10 +169,27 @@ class DooyaController:
                 self._writer.write(full_command)
                 await self._writer.drain()
 
-                # Receive response (if any)
-                response = await self._reader.read(1024)
+                # Set a timeout for reading the response
+                try:
+                    response = await asyncio.wait_for(self._reader.read(1024), timeout=5.0)
+                except asyncio.TimeoutError:
+                    _LOGGER.error("Timeout waiting for device response")
+                    return None
+
                 if not response:
                     _LOGGER.error("No response received from device")
+                    return None
+                
+                # Validate response length
+                if len(response) < 6:
+                    _LOGGER.error("Invalid response length: %d", len(response))
+                    return None
+                
+                # Validate response CRC
+                received_crc = response[-2:]
+                calculated_crc = self.calculate_crc(response[:-2])
+                if received_crc != calculated_crc:
+                    _LOGGER.error("CRC mismatch in response")
                     return None
                     
                 _LOGGER.debug(

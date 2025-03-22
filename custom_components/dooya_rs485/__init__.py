@@ -1,8 +1,7 @@
 """The Dooya RS485 integration."""
 import logging
-from typing import Any
 
-from homeassistant import config_entries, core
+from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
@@ -11,9 +10,6 @@ from .const import DOMAIN
 from .dooya_rs485 import DooyaController
 
 _LOGGER = logging.getLogger(__name__)
-
-# Custom States
-STATE_ERROR = "error"
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Dooya RS485 integration."""
