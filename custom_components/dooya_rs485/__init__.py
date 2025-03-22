@@ -12,6 +12,9 @@ from .dooya_rs485 import DooyaController
 
 _LOGGER = logging.getLogger(__name__)
 
+# Custom States
+STATE_ERROR = "error"
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Dooya RS485 integration."""
     _LOGGER.info("Setting up Dooya RS485 integration")

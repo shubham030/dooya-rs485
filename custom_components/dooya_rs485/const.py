@@ -3,6 +3,9 @@ from homeassistant.components.cover import CoverEntityFeature
 
 DOMAIN = "dooya_rs485"
 
+# Custom States
+STATE_ERROR = "error"
+
 # RS485 Protocol Constants
 START_CODE = 0x55
 
