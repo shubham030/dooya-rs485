@@ -39,8 +39,9 @@ class DooyaCover(CoverEntity):
         self._state = STATE_UNKNOWN
         self._controller = controller
         self._attr_unique_id = f"dooya_{name.lower().replace(' ', '_')}"
-        _LOGGER.info("Cover entity initialized with name: %s, unique_id: %s", self._name, self._attr_unique_id)
         self._last_position = None
+        self._current_position = None
+        _LOGGER.info("Cover entity initialized with name: %s, unique_id: %s", self._name, self._attr_unique_id)
 
     @property
     def name(self) -> str:
@@ -53,9 +54,14 @@ class DooyaCover(CoverEntity):
         return self._state
 
     @property
+    def current_cover_position(self) -> int | None:
+        """Return current position of cover."""
+        return self._current_position
+
+    @property
     def supported_features(self) -> CoverEntityFeature:
         """Flag supported features."""
-        return SUPPORTED_FEATURES
+        return SUPPORTED_FEATURES | CoverEntityFeature.SET_POSITION
 
     @property
     def is_closed(self) -> bool:
@@ -104,6 +110,20 @@ class DooyaCover(CoverEntity):
             self._state = STATE_UNKNOWN
             self.async_write_ha_state()
 
+    async def async_set_cover_position(self, **kwargs: Any) -> None:
+        """Move the cover to a specific position."""
+        try:
+            position = kwargs.get("position")
+            if position is not None:
+                _LOGGER.info("Setting cover position to %d%%", position)
+                await self._controller.set_cover_position(position)
+                self._state = STATE_OPENING if position > self._current_position else STATE_CLOSING
+                self.async_write_ha_state()
+        except Exception as err:
+            _LOGGER.error("Error setting cover position: %s", err)
+            self._state = STATE_UNKNOWN
+            self.async_write_ha_state()
+
     async def async_update(self) -> None:
         """Update the cover state."""
         try:
@@ -112,13 +132,17 @@ class DooyaCover(CoverEntity):
             # Handle invalid position values
             if pos is None or pos == 255:
                 self._state = STATE_UNKNOWN
+                self._current_position = None
             # Handle known positions
             elif pos == 0:
                 self._state = STATE_CLOSED
+                self._current_position = 0
             elif pos == 100:
                 self._state = STATE_OPEN
+                self._current_position = 100
             # Handle intermediate positions
             else:
+                self._current_position = pos
                 # If we have a last known position, use it to determine state
                 if self._last_position is not None:
                     if pos > self._last_position:
@@ -126,8 +150,11 @@ class DooyaCover(CoverEntity):
                     elif pos < self._last_position:
                         self._state = STATE_CLOSING
                     else:
-                        # Position hasn't changed, keep current state
-                        pass
+                        # Position hasn't changed, determine final state based on position
+                        if pos > 50:
+                            self._state = STATE_OPEN
+                        else:
+                            self._state = STATE_CLOSED
                 else:
                     # No last position, assume current position is final
                     if pos > 50:
@@ -141,4 +168,5 @@ class DooyaCover(CoverEntity):
         except Exception as err:
             _LOGGER.error("Error updating cover state: %s", err)
             self._state = STATE_UNKNOWN
+            self._current_position = None
             self.async_write_ha_state()
