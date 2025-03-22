@@ -12,12 +12,14 @@ from homeassistant.const import (
     STATE_OPENING,
     STATE_OPEN,
     STATE_UNKNOWN,
-    STATE_ERROR,
 )
 
 from .const import DOMAIN, SUPPORTED_FEATURES
 
 _LOGGER = logging.getLogger(__name__)
+
+# Custom States
+STATE_ERROR = "error"
 
 # Motor Status Constants
 MOTOR_STATUS_STOPPED = 0x00
