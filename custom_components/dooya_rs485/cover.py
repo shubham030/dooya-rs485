@@ -37,6 +37,7 @@ class DooyaCover(CoverEntity):
         self._state = STATE_UNKNOWN
         self._controller = controller
         self._attr_unique_id = f"dooya_{name.lower().replace(' ', '_')}"
+        self._last_position = None
 
     @property
     def name(self) -> str:
@@ -104,13 +105,36 @@ class DooyaCover(CoverEntity):
         """Update the cover state."""
         try:
             pos = await self._controller.read_cover_position()
-            if pos == 255:
+            
+            # Handle invalid position values
+            if pos is None or pos == 255:
                 self._state = STATE_UNKNOWN
+            # Handle known positions
             elif pos == 0:
                 self._state = STATE_CLOSED
-            else:
+            elif pos == 100:
                 self._state = STATE_OPEN
+            # Handle intermediate positions
+            else:
+                # If we have a last known position, use it to determine state
+                if self._last_position is not None:
+                    if pos > self._last_position:
+                        self._state = STATE_OPENING
+                    elif pos < self._last_position:
+                        self._state = STATE_CLOSING
+                    else:
+                        # Position hasn't changed, keep current state
+                        pass
+                else:
+                    # No last position, assume current position is final
+                    if pos > 50:
+                        self._state = STATE_OPEN
+                    else:
+                        self._state = STATE_CLOSED
+            
+            self._last_position = pos
             self.async_write_ha_state()
+            
         except Exception as err:
             _LOGGER.error("Error updating cover state: %s", err)
             self._state = STATE_UNKNOWN

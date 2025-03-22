@@ -1,8 +1,11 @@
 """API for controlling Dooya curtain motor."""
 import socket
 import binascii
+import logging
 
 from .const import *
+
+_LOGGER = logging.getLogger(__name__)
 
 class DooyaController:
     """Class to control Dooya curtain motor."""
@@ -21,7 +24,6 @@ class DooyaController:
         except socket.error as e:
             _LOGGER.error(f"Failed to connect to {self.tcp_address}:{self.tcp_port} - {e}")
             raise
-
 
     async def open(self):
         """Open the curtain."""
@@ -49,16 +51,34 @@ class DooyaController:
 
     async def read_cover_position(self):
         """Read the cover position."""
-        rs485_command = bytes([CURTAIN_READ,CURTAIN_READ_WRITE_PERCENT,0x01])
-        response = await self.send_rs485_command(rs485_command)
-        # 5th byte contains the cover position, 0-100, FF if position is unknown
-        return response[5]
+        try:
+            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_PERCENT, 0x01])
+            response = await self.send_rs485_command(rs485_command)
+            
+            if response is None or len(response) < 6:
+                _LOGGER.error("Invalid response received from device")
+                return 255  # Return unknown position
+                
+            # 5th byte contains the cover position, 0-100, FF if position is unknown
+            return response[5]
+        except Exception as e:
+            _LOGGER.error("Error reading cover position: %s", e)
+            return 255  # Return unknown position
 
     async def read_cover_direction(self):
         """Read the cover direction."""
-        rs485_command = bytes([CURTAIN_READ,CURTAIN_READ_WRITE_DIRECTION,0x01])
-        response = await self.send_rs485_command(rs485_command)
-        return response[5]
+        try:
+            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_DIRECTION, 0x01])
+            response = await self.send_rs485_command(rs485_command)
+            
+            if response is None or len(response) < 6:
+                _LOGGER.error("Invalid response received from device")
+                return None
+                
+            return response[5]
+        except Exception as e:
+            _LOGGER.error("Error reading cover direction: %s", e)
+            return None
 
     async def send_rs485_command(self, rs485_command):
         """Send RS485 command over TCP."""
@@ -74,14 +94,18 @@ class DooyaController:
 
             # Receive response (if any)
             response = self.serial.recv(1024)
-            print("Response received:", binascii.hexlify(response).decode())
+            if not response:
+                _LOGGER.error("No response received from device")
+                return None
+                
+            _LOGGER.debug("Response received: %s", binascii.hexlify(response).decode())
             return response
                 
         except ConnectionRefusedError:
-            print("Connection refused. Make sure the server is running and the address and port are correct.")
+            _LOGGER.error("Connection refused. Make sure the server is running and the address and port are correct.")
             return None
         except Exception as e:
-            print("An error occurred:", e)
+            _LOGGER.error("Error sending RS485 command: %s", e)
             return None
 
     def calculate_crc(self, data):
