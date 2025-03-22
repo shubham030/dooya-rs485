@@ -39,9 +39,10 @@ class DooyaCover(CoverEntity):
         self._state = STATE_UNKNOWN
         self._controller = controller
         self._attr_unique_id = f"dooya_{name.lower().replace(' ', '_')}"
-        self._attr_device_class = CoverDeviceClass.SHADE
+        self._attr_device_class = CoverDeviceClass.CURTAIN
         self._last_position = None
         self._current_position = None
+        self._target_position = None
         _LOGGER.info("Cover entity initialized with name: %s, unique_id: %s", self._name, self._attr_unique_id)
 
     @property
@@ -91,10 +92,12 @@ class DooyaCover(CoverEntity):
         try:
             await self._controller.open()
             self._state = STATE_OPENING
+            self._target_position = 100
             self.async_write_ha_state()
         except Exception as err:
             _LOGGER.error("Error opening cover: %s", err)
             self._state = STATE_UNKNOWN
+            self._target_position = None
             self.async_write_ha_state()
 
     async def async_close_cover(self, **kwargs: Any) -> None:
@@ -102,20 +105,24 @@ class DooyaCover(CoverEntity):
         try:
             await self._controller.close()
             self._state = STATE_CLOSING
+            self._target_position = 0
             self.async_write_ha_state()
         except Exception as err:
             _LOGGER.error("Error closing cover: %s", err)
             self._state = STATE_UNKNOWN
+            self._target_position = None
             self.async_write_ha_state()
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the cover."""
         try:
             await self._controller.stop()
+            self._target_position = None
             self.async_write_ha_state()
         except Exception as err:
             _LOGGER.error("Error stopping cover: %s", err)
             self._state = STATE_UNKNOWN
+            self._target_position = None
             self.async_write_ha_state()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
@@ -126,11 +133,13 @@ class DooyaCover(CoverEntity):
                 position = self._normalize_position(position)
                 _LOGGER.info("Setting cover position to %d%%", position)
                 await self._controller.set_cover_position(position)
+                self._target_position = position
                 self._state = STATE_OPENING if position > self._current_position else STATE_CLOSING
                 self.async_write_ha_state()
         except Exception as err:
             _LOGGER.error("Error setting cover position: %s", err)
             self._state = STATE_UNKNOWN
+            self._target_position = None
             self.async_write_ha_state()
 
     async def async_update(self) -> None:
@@ -147,18 +156,28 @@ class DooyaCover(CoverEntity):
             if normalized_pos is None:
                 self._state = STATE_UNKNOWN
                 self._current_position = None
+                self._target_position = None
             # Handle known positions
             elif normalized_pos == 0:
                 self._state = STATE_CLOSED
                 self._current_position = 0
+                self._target_position = None
             elif normalized_pos == 100:
                 self._state = STATE_OPEN
                 self._current_position = 100
+                self._target_position = None
             # Handle intermediate positions
             else:
                 self._current_position = normalized_pos
-                # If we have a last known position, use it to determine state
-                if self._last_position is not None:
+                # If we have a target position, check if we've reached it
+                if self._target_position is not None:
+                    if abs(normalized_pos - self._target_position) <= 5:  # 5% tolerance
+                        self._state = STATE_OPEN if normalized_pos > 50 else STATE_CLOSED
+                        self._target_position = None
+                    else:
+                        self._state = STATE_OPENING if normalized_pos < self._target_position else STATE_CLOSING
+                # If no target position, determine state based on last position
+                elif self._last_position is not None:
                     if normalized_pos > self._last_position:
                         self._state = STATE_OPENING
                     elif normalized_pos < self._last_position:
@@ -183,4 +202,5 @@ class DooyaCover(CoverEntity):
             _LOGGER.error("Error updating cover state: %s", err)
             self._state = STATE_UNKNOWN
             self._current_position = None
+            self._target_position = None
             self.async_write_ha_state()
