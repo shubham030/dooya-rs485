@@ -2,7 +2,7 @@
 import logging
 from typing import Any
 
-from homeassistant.components.cover import CoverEntity, CoverEntityFeature
+from homeassistant.components.cover import CoverEntity, CoverEntityFeature, CoverDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -39,6 +39,7 @@ class DooyaCover(CoverEntity):
         self._state = STATE_UNKNOWN
         self._controller = controller
         self._attr_unique_id = f"dooya_{name.lower().replace(' ', '_')}"
+        self._attr_device_class = CoverDeviceClass.SHADE
         self._last_position = None
         self._current_position = None
         _LOGGER.info("Cover entity initialized with name: %s, unique_id: %s", self._name, self._attr_unique_id)
@@ -78,6 +79,13 @@ class DooyaCover(CoverEntity):
         """Return if the cover is closing."""
         return self._state == STATE_CLOSING
 
+    def _normalize_position(self, position: int) -> int:
+        """Normalize position value to 0-100 range."""
+        if position is None or position == 255:
+            return None
+        # Ensure position is between 0 and 100
+        return max(0, min(100, position))
+
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
         try:
@@ -115,6 +123,7 @@ class DooyaCover(CoverEntity):
         try:
             position = kwargs.get("position")
             if position is not None:
+                position = self._normalize_position(position)
                 _LOGGER.info("Setting cover position to %d%%", position)
                 await self._controller.set_cover_position(position)
                 self._state = STATE_OPENING if position > self._current_position else STATE_CLOSING
@@ -128,41 +137,46 @@ class DooyaCover(CoverEntity):
         """Update the cover state."""
         try:
             pos = await self._controller.read_cover_position()
+            _LOGGER.debug("Raw position from device: %d", pos)
+            
+            # Normalize position to 0-100 range
+            normalized_pos = self._normalize_position(pos)
+            _LOGGER.debug("Normalized position: %d", normalized_pos)
             
             # Handle invalid position values
-            if pos is None or pos == 255:
+            if normalized_pos is None:
                 self._state = STATE_UNKNOWN
                 self._current_position = None
             # Handle known positions
-            elif pos == 0:
+            elif normalized_pos == 0:
                 self._state = STATE_CLOSED
                 self._current_position = 0
-            elif pos == 100:
+            elif normalized_pos == 100:
                 self._state = STATE_OPEN
                 self._current_position = 100
             # Handle intermediate positions
             else:
-                self._current_position = pos
+                self._current_position = normalized_pos
                 # If we have a last known position, use it to determine state
                 if self._last_position is not None:
-                    if pos > self._last_position:
+                    if normalized_pos > self._last_position:
                         self._state = STATE_OPENING
-                    elif pos < self._last_position:
+                    elif normalized_pos < self._last_position:
                         self._state = STATE_CLOSING
                     else:
                         # Position hasn't changed, determine final state based on position
-                        if pos > 50:
+                        if normalized_pos > 50:
                             self._state = STATE_OPEN
                         else:
                             self._state = STATE_CLOSED
                 else:
                     # No last position, assume current position is final
-                    if pos > 50:
+                    if normalized_pos > 50:
                         self._state = STATE_OPEN
                     else:
                         self._state = STATE_CLOSED
             
-            self._last_position = pos
+            self._last_position = normalized_pos
             self.async_write_ha_state()
             
         except Exception as err:
