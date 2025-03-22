@@ -104,8 +104,18 @@ class DooyaController:
             rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_PERCENT, 0x01])
             response = await self.send_rs485_command(rs485_command)
             
-            if response is None or len(response) < 6:
-                _LOGGER.error("Invalid response received from device")
+            if response is None:
+                _LOGGER.error("No response received from device")
+                return None
+                
+            # Handle status-only response
+            if len(response) == 2:
+                _LOGGER.warning("Received status-only response for position read")
+                return None
+                
+            # Handle data response
+            if len(response) < 6:
+                _LOGGER.error("Invalid response length for position read: %d", len(response))
                 return None
                 
             position = response[5]
@@ -134,8 +144,18 @@ class DooyaController:
             rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_DIRECTION, 0x01])
             response = await self.send_rs485_command(rs485_command)
             
-            if response is None or len(response) < 6:
-                _LOGGER.error("Invalid response received from device")
+            if response is None:
+                _LOGGER.error("No response received from device")
+                return None
+                
+            # Handle status-only response
+            if len(response) == 2:
+                _LOGGER.warning("Received status-only response for direction read")
+                return None
+                
+            # Handle data response
+            if len(response) < 6:
+                _LOGGER.error("Invalid response length for direction read: %d", len(response))
                 return None
                 
             direction = response[5]
@@ -180,22 +200,34 @@ class DooyaController:
                     _LOGGER.error("No response received from device")
                     return None
                 
-                # Validate response length
-                if len(response) < 6:
-                    _LOGGER.error("Invalid response length: %d", len(response))
-                    return None
-                
-                # Validate response CRC
-                received_crc = response[-2:]
-                calculated_crc = self.calculate_crc(response[:-2])
-                if received_crc != calculated_crc:
-                    _LOGGER.error("CRC mismatch in response")
-                    return None
-                    
+                # Log raw response for debugging
                 _LOGGER.debug(
-                    "Response received: %s",
+                    "Raw response received: %s",
                     binascii.hexlify(response).decode()
                 )
+                
+                # Basic response validation
+                if len(response) < 2:  # Minimum response is just status
+                    _LOGGER.error("Response too short: %d bytes", len(response))
+                    return None
+                
+                # Check if response is just a status (2 bytes)
+                if len(response) == 2:
+                    _LOGGER.debug("Received status-only response")
+                    return response
+                
+                # For longer responses, validate CRC
+                if len(response) >= 4:  # Response with data should have CRC
+                    received_crc = response[-2:]
+                    calculated_crc = self.calculate_crc(response[:-2])
+                    if received_crc != calculated_crc:
+                        _LOGGER.error(
+                            "CRC mismatch - Received: %s, Calculated: %s",
+                            binascii.hexlify(received_crc).decode(),
+                            binascii.hexlify(calculated_crc).decode()
+                        )
+                        return None
+                
                 return response
                     
             except Exception as e:
@@ -224,8 +256,18 @@ class DooyaController:
             rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_MOTOR_STATUS, 0x01])
             response = await self.send_rs485_command(rs485_command)
             
-            if response is None or len(response) < 6:
-                _LOGGER.error("Invalid response received from device")
+            if response is None:
+                _LOGGER.error("No response received from device")
+                return None
+                
+            # Handle status-only response
+            if len(response) == 2:
+                _LOGGER.warning("Received status-only response for motor status read")
+                return None
+                
+            # Handle data response
+            if len(response) < 6:
+                _LOGGER.error("Invalid response length for motor status read: %d", len(response))
                 return None
                 
             status = response[5]
@@ -245,8 +287,18 @@ class DooyaController:
             active_response = await self.send_rs485_command(active_cmd)
             passive_response = await self.send_rs485_command(passive_cmd)
             
-            if active_response is None or passive_response is None or len(active_response) < 6 or len(passive_response) < 6:
-                _LOGGER.error("Invalid response received from device")
+            if active_response is None or passive_response is None:
+                _LOGGER.error("No response received from device")
+                return None, None
+                
+            # Handle status-only responses
+            if len(active_response) == 2 or len(passive_response) == 2:
+                _LOGGER.warning("Received status-only response for switch status read")
+                return None, None
+                
+            # Handle data responses
+            if len(active_response) < 6 or len(passive_response) < 6:
+                _LOGGER.error("Invalid response length for switch status read")
                 return None, None
                 
             active_status = active_response[5]
@@ -264,8 +316,18 @@ class DooyaController:
             rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_VERSION, 0x01])
             response = await self.send_rs485_command(rs485_command)
             
-            if response is None or len(response) < 6:
-                _LOGGER.error("Invalid response received from device")
+            if response is None:
+                _LOGGER.error("No response received from device")
+                return None
+                
+            # Handle status-only response
+            if len(response) == 2:
+                _LOGGER.warning("Received status-only response for version read")
+                return None
+                
+            # Handle data response
+            if len(response) < 6:
+                _LOGGER.error("Invalid response length for version read: %d", len(response))
                 return None
                 
             version = response[5]
@@ -282,8 +344,18 @@ class DooyaController:
             rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_HANDLE, 0x01])
             response = await self.send_rs485_command(rs485_command)
             
-            if response is None or len(response) < 6:
-                _LOGGER.error("Invalid response received from device")
+            if response is None:
+                _LOGGER.error("No response received from device")
+                return None
+                
+            # Handle status-only response
+            if len(response) == 2:
+                _LOGGER.warning("Received status-only response for handle status read")
+                return None
+                
+            # Handle data response
+            if len(response) < 6:
+                _LOGGER.error("Invalid response length for handle status read: %d", len(response))
                 return None
                 
             status = response[5]
