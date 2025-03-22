@@ -26,7 +26,12 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
 async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, ["cover"])
-    if unload_ok:
-        hass.data[DOMAIN][entry.entry_id]["controller"].serial.close()
+    if unload_ok and entry.entry_id in hass.data[DOMAIN]:
+        domain_data = hass.data[DOMAIN][entry.entry_id]
+        if "controller" in domain_data:
+            try:
+                domain_data["controller"].serial.close()
+            except Exception:
+                pass  # Ignore any errors during cleanup
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
