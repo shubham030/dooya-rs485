@@ -1,3 +1,4 @@
+"""Config flow for Dooya RS485 integration."""
 import logging
 import voluptuous as vol
 
@@ -7,24 +8,36 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# Helper to convert hex strings to int
 def hex_or_int(value):
+    """Convert hex string to int or return as is if already int."""
     try:
-        # Supports both decimal and hex formats
         return int(value, 0)
     except ValueError:
         raise vol.Invalid("Must be an integer or hex (e.g., 0xFE)")
 
+def validate_device_id(value):
+    """Validate device ID is within valid range."""
+    value = hex_or_int(value)
+    if not 0 <= value <= 255:
+        raise vol.Invalid("Device ID must be between 0 and 255")
+    return value
+
 DATA_SCHEMA = vol.Schema({
-    vol.Required("name"): str,
-    vol.Required("tcp_address"): str,
-    vol.Required("tcp_port"): int,
-    vol.Required("device_id_l", description="Device ID Low (0-255 or 0x00-0xFF)"): str,
-    vol.Required("device_id_h", description="Device ID High (0-255 or 0x00-0xFF)"): str,
+    vol.Required("name", description="Name of the curtain"): str,
+    vol.Required("tcp_address", description="IP address of the RS485 gateway"): str,
+    vol.Required("tcp_port", description="TCP port of the RS485 gateway"): int,
+    vol.Required(
+        "device_id_l",
+        description="Low byte of device ID (0-255 or 0x00-0xFF)"
+    ): str,
+    vol.Required(
+        "device_id_h",
+        description="High byte of device ID (0-255 or 0x00-0xFF)"
+    ): str,
 })
 
 class DooyaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Dooya Curtain Motor."""
+    """Handle a config flow for Dooya RS485."""
 
     VERSION = 1
     CONNECTION_CLASS = "local_polling"
@@ -35,28 +48,36 @@ class DooyaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                device_id_l = hex_or_int(user_input["device_id_l"])
-                device_id_h = hex_or_int(user_input["device_id_h"])
+                # Validate device IDs
+                device_id_l = validate_device_id(user_input["device_id_l"])
+                device_id_h = validate_device_id(user_input["device_id_h"])
                 
-                if not (0 <= device_id_l <= 255 and 0 <= device_id_h <= 255):
-                    raise ValueError("Device IDs must be between 0 and 255")
-                
+                # Update user input with validated values
                 user_input["device_id_l"] = device_id_l
                 user_input["device_id_h"] = device_id_h
                 
+                # Create unique ID from name
                 unique_id = f"dooya_{user_input['name'].lower().replace(' ', '_')}"
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
-                return self.async_create_entry(title=user_input["name"], data=user_input)
+                return self.async_create_entry(
+                    title=user_input["name"],
+                    data=user_input
+                )
             except ValueError as err:
                 errors["base"] = str(err)
 
-        return self.async_show_form(step_id="user", data_schema=DATA_SCHEMA, errors=errors)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=DATA_SCHEMA,
+            errors=errors
+        )
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
+        """Get the options flow for this handler."""
         return DooyaOptionsFlowHandler(config_entry)
 
 
@@ -73,12 +94,11 @@ class DooyaOptionsFlowHandler(config_entries.OptionsFlow):
 
         if user_input is not None:
             try:
-                device_id_l = hex_or_int(user_input["device_id_l"])
-                device_id_h = hex_or_int(user_input["device_id_h"])
+                # Validate device IDs
+                device_id_l = validate_device_id(user_input["device_id_l"])
+                device_id_h = validate_device_id(user_input["device_id_h"])
                 
-                if not (0 <= device_id_l <= 255 and 0 <= device_id_h <= 255):
-                    raise ValueError("Device IDs must be between 0 and 255")
-                
+                # Update user input with validated values
                 user_input["device_id_l"] = device_id_l
                 user_input["device_id_h"] = device_id_h
                 
@@ -89,11 +109,26 @@ class DooyaOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required("name", default=self.config_entry.data.get("name")): str,
-                vol.Required("tcp_address", default=self.config_entry.data.get("tcp_address")): str,
-                vol.Required("tcp_port", default=self.config_entry.data.get("tcp_port")): int,
-                vol.Required("device_id_l", default=hex(self.config_entry.data.get("device_id_l"))): str,
-                vol.Required("device_id_h", default=hex(self.config_entry.data.get("device_id_h"))): str,
+                vol.Required(
+                    "name",
+                    default=self.config_entry.data.get("name")
+                ): str,
+                vol.Required(
+                    "tcp_address",
+                    default=self.config_entry.data.get("tcp_address")
+                ): str,
+                vol.Required(
+                    "tcp_port",
+                    default=self.config_entry.data.get("tcp_port")
+                ): int,
+                vol.Required(
+                    "device_id_l",
+                    default=hex(self.config_entry.data.get("device_id_l"))
+                ): str,
+                vol.Required(
+                    "device_id_h",
+                    default=hex(self.config_entry.data.get("device_id_h"))
+                ): str,
             }),
             errors=errors
         )

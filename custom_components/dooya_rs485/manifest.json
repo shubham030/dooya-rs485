@@ -1,11 +1,12 @@
 {
+  "domain": "dooya_rs485",
+  "name": "Dooya RS485 Curtain",
   "codeowners": ["@shubham030"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/user/my_component/",
-  "domain": "dooya_rs485",
+  "documentation": "https://github.com/shubham030/dooya-rs485",
+  "homekit": {},
   "iot_class": "local_polling",
-  "name": "Dooya Curtain Motor",
   "requirements": [],
   "version": "0.0.1"
 }
