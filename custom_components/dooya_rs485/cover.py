@@ -25,6 +25,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Dooya RS485 cover from a config entry."""
     data = hass.data[DOMAIN][entry.entry_id]
+    _LOGGER.info("Setting up cover entity with name: %s", data["data"]["name"])
     async_add_entities([DooyaCover(data["controller"], data["data"]["name"])])
 
 
@@ -33,10 +34,12 @@ class DooyaCover(CoverEntity):
 
     def __init__(self, controller, name: str) -> None:
         """Initialize the cover."""
+        _LOGGER.info("Initializing DooyaCover with name: %s", name)
         self._name = name
         self._state = STATE_UNKNOWN
         self._controller = controller
         self._attr_unique_id = f"dooya_{name.lower().replace(' ', '_')}"
+        _LOGGER.info("Cover entity initialized with name: %s, unique_id: %s", self._name, self._attr_unique_id)
         self._last_position = None
 
     @property
