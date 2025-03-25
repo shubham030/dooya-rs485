@@ -204,6 +204,9 @@ class DooyaCover(CoverEntity):
     async def async_update(self) -> None:
         """Update the cover state."""
         try:
+            # Ensure controller is connected before attempting updates
+            await self._controller._ensure_connected()
+            
             # Read all status information
             pos = await self._controller.read_cover_position()
             motor_status = await self._controller.read_motor_status()

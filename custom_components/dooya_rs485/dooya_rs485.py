@@ -49,29 +49,66 @@ class DooyaController:
         self._reader = None
         self._writer = None
         self._lock = asyncio.Lock()
+        self._connection_retries = 0
+        self._max_connection_retries = 3
+        self._retry_delay = 5  # seconds between connection attempts
         _LOGGER.debug("Controller initialized successfully")
 
     async def connect(self):
-        """Connect to the TCP server."""
-        _LOGGER.info("Attempting to connect to %s:%s", self.tcp_address, self.tcp_port)
-        try:
-            self._reader, self._writer = await asyncio.open_connection(
-                self.tcp_address, self.tcp_port
-            )
-            _LOGGER.info("Successfully connected to %s:%s", self.tcp_address, self.tcp_port)
-        except Exception as e:
-            _LOGGER.error("Failed to connect to %s:%s - %s", self.tcp_address, self.tcp_port, e)
-            raise
+        """Connect to the TCP server with retry logic."""
+        while self._connection_retries < self._max_connection_retries:
+            try:
+                _LOGGER.info("Attempting to connect to %s:%s (attempt %d/%d)", 
+                    self.tcp_address, 
+                    self.tcp_port,
+                    self._connection_retries + 1,
+                    self._max_connection_retries
+                )
+                self._reader, self._writer = await asyncio.open_connection(
+                    self.tcp_address, self.tcp_port
+                )
+                self._connection_retries = 0  # Reset counter on successful connection
+                _LOGGER.info("Successfully connected to %s:%s", self.tcp_address, self.tcp_port)
+                return True
+            except Exception as e:
+                self._connection_retries += 1
+                if self._connection_retries < self._max_connection_retries:
+                    _LOGGER.warning(
+                        "Connection attempt %d failed, retrying in %d seconds: %s",
+                        self._connection_retries,
+                        self._retry_delay,
+                        str(e)
+                    )
+                    await asyncio.sleep(self._retry_delay)
+                else:
+                    _LOGGER.error(
+                        "Failed to connect after %d attempts: %s",
+                        self._max_connection_retries,
+                        str(e)
+                    )
+                    raise
+
+    async def _ensure_connected(self):
+        """Ensure connection is active, reconnect if necessary."""
+        if self._writer is None or self._writer.is_closing():
+            _LOGGER.info("Connection lost, attempting to reconnect")
+            self._connection_retries = 0  # Reset retry counter
+            await self.disconnect()  # Clean up any existing connection
+            await self.connect()
 
     async def disconnect(self):
         """Disconnect from the TCP server."""
         _LOGGER.info("Disconnecting from %s:%s", self.tcp_address, self.tcp_port)
         if self._writer:
-            self._writer.close()
-            await self._writer.wait_closed()
-            self._reader = None
-            self._writer = None
-            _LOGGER.info("Successfully disconnected")
+            try:
+                self._writer.close()
+                await self._writer.wait_closed()
+            except Exception as e:
+                _LOGGER.warning("Error during disconnect: %s", e)
+            finally:
+                self._reader = None
+                self._writer = None
+                _LOGGER.info("Successfully disconnected")
 
     async def open(self):
         """Open the curtain."""
@@ -170,13 +207,11 @@ class DooyaController:
             return None
 
     async def send_rs485_command(self, rs485_command):
-        """Send RS485 command over TCP."""
+        """Send RS485 command over TCP with connection handling."""
         async with self._lock:
             try:
                 # Ensure we're connected
-                if not self._writer:
-                    _LOGGER.debug("No active connection, attempting to connect")
-                    await self.connect()
+                await self._ensure_connected()
 
                 # Construct full command
                 full_command = bytes([START_CODE, self.device_id_l, self.device_id_h]) + rs485_command
@@ -196,14 +231,14 @@ class DooyaController:
                 # Set a timeout for reading the response
                 try:
                     response = await asyncio.wait_for(self._reader.read(1024), timeout=5.0)
-                except asyncio.TimeoutError:
-                    _LOGGER.error("Timeout waiting for device response")
+                    if not response:
+                        raise ConnectionError("Empty response received")
+                except (asyncio.TimeoutError, ConnectionError) as e:
+                    _LOGGER.error("Connection error: %s", str(e))
+                    # Force reconnection on next attempt
+                    await self.disconnect()
                     return None
 
-                if not response:
-                    _LOGGER.error("No response received from device")
-                    return None
-                
                 # Log raw response for debugging
                 _LOGGER.debug(
                     "Raw response received: %s",
@@ -236,7 +271,7 @@ class DooyaController:
                     
             except Exception as e:
                 _LOGGER.error("Error sending RS485 command: %s", e)
-                # Try to reconnect on next command
+                # Force reconnection on next attempt
                 await self.disconnect()
                 return None
 
