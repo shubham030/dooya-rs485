@@ -5,8 +5,7 @@
 <h1 align="center">Dooya RS485 Home Assistant Integration</h1>
 
 <p align="center">
-  <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Default-41BDF5.svg" alt="HACS Badge"></a>
-  <a href="https://github.com/shubham030/dooya-rs485/releases"><img src="https://img.shields.io/github/release/shubham030/dooya-rs485.svg" alt="GitHub Release"></a>
+  <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS Badge"></a>
   <a href="https://github.com/shubham030/dooya-rs485/blob/main/LICENSE"><img src="https://img.shields.io/github/license/shubham030/dooya-rs485.svg" alt="License"></a>
 </p>
 
@@ -53,8 +52,8 @@
 
 ### Manual Installation
 
-1. Download the latest release from the [releases page](https://github.com/shubham030/dooya-rs485/releases)
-2. Extract the `custom_components/dooya_rs485` folder to your Home Assistant's `custom_components` directory
+1. Download or clone this repository
+2. Copy the `custom_components/dooya_rs485` folder to your Home Assistant's `custom_components` directory
 3. Restart Home Assistant
 4. Go to **Settings** → **Devices & Services** → **Add Integration** → Search for "Dooya RS485"
 
