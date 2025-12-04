@@ -7,7 +7,6 @@ from typing import Optional, Tuple
 from .const import (
     START_CODE,
     CURTAIN_READ,
-    CURTAIN_WRITE,
     CURTAIN_COMMAND,
     CURTAIN_COMMAND_OPEN,
     CURTAIN_COMMAND_CLOSE,

@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN
@@ -25,16 +25,14 @@ UPDATE_INTERVAL = timedelta(seconds=30)
 # Connection timeout for initial setup (gateway may still be booting)
 SETUP_TIMEOUT = 15
 
-
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the Dooya RS485 integration."""
-    _LOGGER.info("Setting up Dooya RS485 integration")
-    hass.data.setdefault(DOMAIN, {})
-    return True
+# This integration is config entry only (no YAML configuration)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Dooya RS485 from a config entry."""
+    hass.data.setdefault(DOMAIN, {})
+    
     _LOGGER.info(
         "Setting up Dooya RS485 entry: name=%s, tcp_address=%s, tcp_port=%d, device_id_l=0x%02X, device_id_h=0x%02X",
         entry.data.get("name"),
