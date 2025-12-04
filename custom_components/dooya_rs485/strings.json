@@ -1,0 +1,63 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Dooya RS485 Curtain Setup",
+        "description": "Configure your Dooya RS485 curtain motor connection.",
+        "data": {
+          "name": "Name",
+          "tcp_address": "TCP Gateway IP Address",
+          "tcp_port": "TCP Gateway Port",
+          "device_id_l": "Device ID Low Byte (0-255 or 0x00-0xFF)",
+          "device_id_h": "Device ID High Byte (0-255 or 0x00-0xFF)"
+        },
+        "data_description": {
+          "name": "A friendly name for your curtain",
+          "tcp_address": "IP address of your RS485 to TCP gateway",
+          "tcp_port": "Port number of your RS485 to TCP gateway",
+          "device_id_l": "Low byte of the Dooya device address",
+          "device_id_h": "High byte of the Dooya device address"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to device",
+      "invalid_device_id": "Invalid device ID format",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dooya RS485 Options",
+        "description": "Update your Dooya RS485 curtain motor configuration.",
+        "data": {
+          "name": "Name",
+          "tcp_address": "TCP Gateway IP Address",
+          "tcp_port": "TCP Gateway Port",
+          "device_id_l": "Device ID Low Byte (0-255 or 0x00-0xFF)",
+          "device_id_h": "Device ID High Byte (0-255 or 0x00-0xFF)"
+        }
+      }
+    }
+  },
+  "services": {
+    "program_address": {
+      "name": "Program Device Address",
+      "description": "Program a new RS485 address for the Dooya device. The device must be in programming mode (button held until LED flashes twice).",
+      "fields": {
+        "address_low": {
+          "name": "Address Low Byte",
+          "description": "New low byte of the device address (1-254)"
+        },
+        "address_high": {
+          "name": "Address High Byte",
+          "description": "New high byte of the device address (1-254)"
+        }
+      }
+    }
+  }
+}

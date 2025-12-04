@@ -1,0 +1,30 @@
+program_address:
+  name: Program Device Address
+  description: >-
+    Program a new RS485 address for the Dooya device.
+    The device must be in programming mode (button held until LED flashes twice).
+  target:
+    entity:
+      integration: dooya_rs485
+      domain: cover
+  fields:
+    address_low:
+      name: Address Low Byte
+      description: New low byte of the device address (1-254)
+      required: true
+      example: 18
+      selector:
+        number:
+          min: 1
+          max: 254
+          mode: box
+    address_high:
+      name: Address High Byte
+      description: New high byte of the device address (1-254)
+      required: true
+      example: 52
+      selector:
+        number:
+          min: 1
+          max: 254
+          mode: box

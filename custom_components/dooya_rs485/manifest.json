@@ -5,8 +5,9 @@
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/shubham030/dooya-rs485",
-  "homekit": {},
+  "integration_type": "device",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/shubham030/dooya-rs485/issues",
   "requirements": [],
-  "version": "0.0.1"
+  "version": "1.0.0"
 }

@@ -1,0 +1,162 @@
+# =============================================================================
+# Home Assistant Script Examples for Dooya RS485
+# =============================================================================
+# Add these to your configuration.yaml or scripts.yaml
+#
+# These scripts provide convenient ways to control your Dooya curtains
+# and program device addresses.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Basic Control Scripts
+# -----------------------------------------------------------------------------
+
+# Open all curtains
+open_all_curtains:
+  alias: "Open All Curtains"
+  icon: mdi:curtains
+  sequence:
+    - service: cover.open_cover
+      target:
+        entity_id: all
+      data:
+        # Only target Dooya covers
+        entity_id: >
+          {{ states.cover 
+             | selectattr('attributes.device_class', 'eq', 'curtain')
+             | map(attribute='entity_id')
+             | list }}
+
+# Close all curtains
+close_all_curtains:
+  alias: "Close All Curtains"
+  icon: mdi:curtains
+  sequence:
+    - service: cover.close_cover
+      target:
+        entity_id: >
+          {{ states.cover 
+             | selectattr('attributes.device_class', 'eq', 'curtain')
+             | map(attribute='entity_id')
+             | list }}
+
+# Set all curtains to 50%
+curtains_half_open:
+  alias: "Curtains Half Open"
+  icon: mdi:curtains
+  sequence:
+    - service: cover.set_cover_position
+      target:
+        entity_id: >
+          {{ states.cover 
+             | selectattr('attributes.device_class', 'eq', 'curtain')
+             | map(attribute='entity_id')
+             | list }}
+      data:
+        position: 50
+
+# -----------------------------------------------------------------------------
+# Address Programming Script
+# -----------------------------------------------------------------------------
+# This script helps program a new address on a Dooya device
+# 
+# IMPORTANT: 
+# 1. First, press and hold the motor button until LED flashes twice
+# 2. Then run this script within 10 seconds
+# 3. Wait for LED to flash 5 times (success) or no flash (failure)
+# -----------------------------------------------------------------------------
+
+program_dooya_address:
+  alias: "Program Dooya Address"
+  icon: mdi:cog-transfer
+  description: "Program a new RS485 address on a Dooya device"
+  fields:
+    cover_entity:
+      name: "Cover Entity"
+      description: "The cover entity to program"
+      required: true
+      selector:
+        entity:
+          domain: cover
+          integration: dooya_rs485
+    new_address_low:
+      name: "New Address Low Byte"
+      description: "Low byte of new address (1-254)"
+      required: true
+      default: 2
+      selector:
+        number:
+          min: 1
+          max: 254
+          mode: box
+    new_address_high:
+      name: "New Address High Byte"
+      description: "High byte of new address (1-254)"
+      required: true
+      default: 254
+      selector:
+        number:
+          min: 1
+          max: 254
+          mode: box
+  sequence:
+    - service: persistent_notification.create
+      data:
+        title: "Dooya Address Programming"
+        message: >
+          Programming address 0x{{ '%02X' % new_address_high }}{{ '%02X' % new_address_low }}
+          on {{ cover_entity }}.
+          
+          Make sure you've pressed the motor button until LED flashed twice!
+    - service: dooya_rs485.program_address
+      target:
+        entity_id: "{{ cover_entity }}"
+      data:
+        address_low: "{{ new_address_low }}"
+        address_high: "{{ new_address_high }}"
+    - delay:
+        seconds: 2
+    - service: persistent_notification.create
+      data:
+        title: "Dooya Address Programming"
+        message: >
+          Address programming command sent!
+          
+          If successful, LED should flash 5 times.
+          
+          Remember to update your integration config with:
+          - device_id_l: 0x{{ '%02X' % new_address_low }}
+          - device_id_h: 0x{{ '%02X' % new_address_high }}
+
+# -----------------------------------------------------------------------------
+# Automation Example: Close curtains at sunset
+# -----------------------------------------------------------------------------
+
+# automation:
+#   - alias: "Close Curtains at Sunset"
+#     trigger:
+#       - platform: sun
+#         event: sunset
+#         offset: "+00:30:00"
+#     action:
+#       - service: cover.close_cover
+#         target:
+#           entity_id: cover.living_room_curtain
+
+# -----------------------------------------------------------------------------
+# Automation Example: Open curtains in morning
+# -----------------------------------------------------------------------------
+
+# automation:
+#   - alias: "Open Curtains in Morning"
+#     trigger:
+#       - platform: time
+#         at: "07:00:00"
+#     condition:
+#       - condition: state
+#         entity_id: binary_sensor.workday_sensor
+#         state: "on"
+#     action:
+#       - service: cover.open_cover
+#         target:
+#           entity_id: cover.bedroom_curtain

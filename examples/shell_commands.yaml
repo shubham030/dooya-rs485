@@ -1,0 +1,57 @@
+# =============================================================================
+# Shell Commands for Dooya RS485
+# =============================================================================
+# These shell commands allow you to run the test scripts directly from
+# Home Assistant. Add these to your configuration.yaml
+#
+# Prerequisites:
+#   1. Copy the test scripts to your HA config directory:
+#      /config/custom_components/dooya_rs485/scripts/
+#   2. Make them executable: chmod +x *.py
+#   3. Add these shell_commands to configuration.yaml
+# =============================================================================
+
+shell_command:
+  # Test connection to Dooya device (read-only, safe)
+  dooya_test_connection: >
+    python3 /config/custom_components/dooya_rs485/scripts/test_connection.py 
+    {{ device_id_l | default('0x02') }} {{ device_id_h | default('0xFE') }}
+  
+  # Open curtain via direct RS485 command
+  dooya_open: >
+    python3 /config/custom_components/dooya_rs485/scripts/test_set_stroke.py open
+  
+  # Close curtain via direct RS485 command
+  dooya_close: >
+    python3 /config/custom_components/dooya_rs485/scripts/test_set_stroke.py close
+  
+  # Stop curtain via direct RS485 command
+  dooya_stop: >
+    python3 /config/custom_components/dooya_rs485/scripts/test_set_stroke.py stop
+  
+  # Program new address (CAUTION: changes device address permanently!)
+  dooya_program_address: >
+    python3 /config/custom_components/dooya_rs485/scripts/test_program_address.py
+    {{ new_id_l }} {{ new_id_h }}
+
+
+# =============================================================================
+# Example usage in automations/scripts:
+# =============================================================================
+#
+# # Test connection
+# - service: shell_command.dooya_test_connection
+#   data:
+#     device_id_l: "0x02"
+#     device_id_h: "0xFE"
+#
+# # Open curtain
+# - service: shell_command.dooya_open
+#
+# # Program new address (BE CAREFUL!)
+# - service: shell_command.dooya_program_address
+#   data:
+#     new_id_l: "0x02"
+#     new_id_h: "0xFE"
+#
+# =============================================================================

@@ -1,22 +1,36 @@
-# Dooya RS485 Home Assistant Integration
+<p align="center">
+  <img src="images/logo.png" alt="Dooya Logo" width="150">
+</p>
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
+<h1 align="center">Dooya RS485 Home Assistant Integration</h1>
 
-A Home Assistant integration for controlling Dooya curtain motors via RS485 (through a TCP gateway).
+<p align="center">
+  <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Default-41BDF5.svg" alt="HACS Badge"></a>
+  <a href="https://github.com/shubham030/dooya-rs485/releases"><img src="https://img.shields.io/github/release/shubham030/dooya-rs485.svg" alt="GitHub Release"></a>
+  <a href="https://github.com/shubham030/dooya-rs485/blob/main/LICENSE"><img src="https://img.shields.io/github/license/shubham030/dooya-rs485.svg" alt="License"></a>
+</p>
+
+<p align="center">
+  A Home Assistant custom integration for controlling Dooya curtain motors via RS485 (through a TCP gateway).
+</p>
+
+---
 
 ## Features
 
-- Control Dooya curtain motors (open, close, stop)
-- Set specific positions (0-100%)
-- Read motor status and position
-- Monitor switch and handle status
-- Program device addresses
-- Support for multiple curtains
-- Automatic error recovery
+- 🎛️ Control Dooya curtain motors (open, close, stop)
+- 📍 Set specific positions (0-100%)
+- 📊 Read motor status and position in real-time
+- 🔄 Monitor switch and handle status
+- 🔧 Program device addresses
+- 🏠 Support for multiple curtains
+- 🔁 Automatic connection recovery and retry logic
+- ⚡ Efficient polling with Home Assistant DataUpdateCoordinator
+- 🔄 Auto-restart on failure (ConfigEntryNotReady)
 
 ## Prerequisites
 
-- Home Assistant
+- Home Assistant 2024.1.0 or newer
 - RS485 to TCP gateway (configured and connected to your network)
 - Dooya curtain motor with RS485 support
 
@@ -24,40 +38,49 @@ A Home Assistant integration for controlling Dooya curtain motors via RS485 (thr
 
 ### HACS (Recommended)
 
-1. Add this repository as a custom repository in HACS:
-    - Click on HACS in the sidebar
-    - Click on "Integrations"
-    - Click the three dots in the top right corner
-    - Select "Custom repositories"
-    - Add `https://github.com/shubham030/dooya-rs485` as a new repository
-    - Category: Integration
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=shubham030&repository=dooya-rs485&category=integration)
 
-2. Click "Install" on the Dooya RS485 integration
+1. Click the button above, or:
+   - Open HACS in Home Assistant
+   - Click on "Integrations"
+   - Click the "+" button
+   - Search for "Dooya RS485"
+   - Click "Download"
+
+2. Restart Home Assistant
+
+3. Go to **Settings** → **Devices & Services** → **Add Integration** → Search for "Dooya RS485"
 
 ### Manual Installation
 
 1. Download the latest release from the [releases page](https://github.com/shubham030/dooya-rs485/releases)
 2. Extract the `custom_components/dooya_rs485` folder to your Home Assistant's `custom_components` directory
 3. Restart Home Assistant
+4. Go to **Settings** → **Devices & Services** → **Add Integration** → Search for "Dooya RS485"
 
 ## Configuration
 
-1. Go to Home Assistant Settings > Devices & Services
-2. Click "Add Integration"
+1. Go to Home Assistant **Settings** → **Devices & Services**
+2. Click **Add Integration**
 3. Search for "Dooya RS485"
 4. Fill in the required information:
-   - Name: A friendly name for your curtain
-   - TCP Address: IP address of your RS485 gateway
-   - TCP Port: Port number of your RS485 gateway
-   - Device ID Low: Low byte of the device address (0-255 or hex 0x00-0xFF)
-   - Device ID High: High byte of the device address (0-255 or hex 0x00-0xFF)
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| **Name** | A friendly name for your curtain | Living Room Curtain |
+| **TCP Address** | IP address of your RS485 gateway | 192.168.1.100 |
+| **TCP Port** | Port number of your RS485 gateway | 502 |
+| **Device ID Low** | Low byte of the device address (0-255 or hex) | 0x02 |
+| **Device ID High** | High byte of the device address (0-255 or hex) | 0xFE |
 
 ## Device Address Programming
 
-The integration supports programming new device addresses. To change a device's address:
+The integration supports programming new device addresses. This is useful when you need to change the default factory address (0xFEFE) or assign unique addresses to multiple devices.
 
-1. Press and hold the motor setting button for 5 seconds until the LED flashes twice
-2. Within 10 seconds, call the `dooya_rs485.program_address` service:
+### Steps to Program a New Address
+
+1. Press and hold the motor setting button for **5 seconds** until the LED flashes twice
+2. Within **10 seconds**, call the `dooya_rs485.program_address` service:
 
 ```yaml
 service: dooya_rs485.program_address
@@ -69,85 +92,229 @@ data:
 ```
 
 **Important Notes:**
-- Address bytes cannot be 0x00 or 0xFF
-- Default factory address is 0xFEFE
+- Address bytes cannot be `0x00` or `0xFF`
+- Default factory address is `0xFEFE`
 - LED will flash 5 times to confirm successful programming
 - If programming fails, the device keeps its previous address
 
 ## Services
 
-### program_address
+### `dooya_rs485.program_address`
+
 Program a new device address.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| address_low | int | Yes | Low byte of new address (1-254) |
-| address_high | int | Yes | High byte of new address (1-254) |
+| `address_low` | int | Yes | Low byte of new address (1-254) |
+| `address_high` | int | Yes | High byte of new address (1-254) |
 
-### open_cover
-Open the curtain fully.
+### Standard Cover Services
 
-### close_cover
-Close the curtain fully.
+All standard Home Assistant cover services are supported:
 
-### stop_cover
-Stop the curtain at its current position.
-
-### set_cover_position
-Move the curtain to a specific position.
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| position | int | Yes | Target position (0-100) |
+- `cover.open_cover` - Open the curtain fully
+- `cover.close_cover` - Close the curtain fully
+- `cover.stop_cover` - Stop the curtain at its current position
+- `cover.set_cover_position` - Move the curtain to a specific position (0-100)
 
 ## Attributes
 
 The integration exposes several attributes for monitoring device status:
 
-| Attribute | Description |
-|-----------|-------------|
-| current_position | Current position (0-100%) |
-| motor_status | Motor status (stopped/running/error) |
-| active_switch_status | Active switch status |
-| passive_switch_status | Passive switch status |
-| handle_status | Handle operation status |
-| device_version | Device firmware version |
+| Attribute | Description | Values |
+|-----------|-------------|--------|
+| `current_position` | Current position | 0-100% |
+| `motor_status` | Motor status | stopped / running / error |
+| `active_switch_status` | Active switch status | normal / triggered |
+| `passive_switch_status` | Passive switch status | normal / triggered |
+| `handle_status` | Handle operation status | normal / operated |
 
-## Protocol Details
+## Auto-Recovery
 
-The integration uses the Dooya RS485 protocol with the following specifications:
+The integration includes automatic recovery features:
 
-- Start Code: 0x55
-- Command Types:
-  - Read (0x01)
-  - Write (0x02)
-  - Control (0x03)
-  - Address Programming (0x04)
-- CRC16 checksum for all commands
-- Default factory address: 0xFEFE
+| Scenario | Behavior |
+|----------|----------|
+| **Connection fails on startup** | Home Assistant retries automatically (30s, 60s, 120s...) |
+| **Gateway not ready after reboot** | Keeps retrying until connection succeeds |
+| **Connection lost while running** | Auto-reconnects on next poll cycle |
+| **Multiple consecutive failures** | Logs warnings, continues trying |
 
 ## Troubleshooting
 
-1. **Connection Issues**
-   - Verify TCP gateway IP address and port
-   - Check physical RS485 connections
-   - Ensure correct device address is configured
+### Connection Issues
 
-2. **Communication Errors**
-   - Integration will automatically retry failed commands
-   - After 3 consecutive failures, device will attempt reset
-   - Check logs for detailed error messages
+- ✅ Verify TCP gateway IP address and port
+- ✅ Check physical RS485 connections (A/B wiring)
+- ✅ Ensure correct device address is configured
+- ✅ Check that no other application is using the TCP port
 
-3. **Address Programming Fails**
-   - Ensure button is held until LED flashes twice
-   - Program address within 10 seconds of LED signal
-   - Verify new address bytes are not 0x00 or 0xFF
+### Position Shows "Unknown" or 0xFF
+
+This usually means the motor's stroke (travel limits) hasn't been set:
+
+1. Use the test script or Home Assistant to fully **open** the curtain
+2. Then fully **close** the curtain
+3. The stroke should now be calibrated and position will report 0-100%
+
+### Communication Errors
+
+- The integration automatically retries failed commands (up to 3 times)
+- Connection will be automatically re-established if lost
+- Check logs: **Settings** → **System** → **Logs**
+
+### Address Programming Fails
+
+- Ensure button is held until LED flashes **twice**
+- Program address within **10 seconds** of LED signal
+- Verify new address bytes are not `0x00` or `0xFF`
+
+## Debug Logging
+
+To enable debug logging, add this to your `configuration.yaml`:
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.dooya_rs485: debug
+```
+
+## Test Scripts
+
+The repository includes standalone Python scripts for debugging and testing your setup outside of Home Assistant.
+
+### test_connection.py
+
+Tests the connection and reads device status (READ-ONLY, safe).
+
+```bash
+# Test with default address (0xFEFE)
+python test_connection.py
+
+# Test with custom address
+python test_connection.py 0x02 0xFE
+```
+
+### test_set_stroke.py
+
+Controls the curtain and monitors position in real-time.
+
+```bash
+# Open the curtain
+python test_set_stroke.py open
+
+# Close the curtain
+python test_set_stroke.py close
+
+# Stop immediately
+python test_set_stroke.py stop
+
+# Monitor position only (no movement)
+python test_set_stroke.py monitor
+```
+
+### test_program_address.py
+
+Programs a new RS485 address on a device. ⚠️ **This changes the device permanently!**
+
+```bash
+# Program address to 0xFE02
+python test_program_address.py 0x02 0xFE
+
+# Program address to 0x1234
+python test_program_address.py 0x34 0x12
+```
+
+**Steps:**
+1. Press and hold motor button for 5 seconds until LED flashes **twice**
+2. Run the script within 10 seconds
+3. LED flashes 5 times = success
+
+**Note:** Edit the configuration section in each script to match your setup (IP, port, device ID).
+
+## Home Assistant Scripts & Automations
+
+See the `examples/` folder for ready-to-use Home Assistant configurations:
+
+- **`ha_scripts.yaml`** - Scripts for controlling curtains and programming addresses
+- **`shell_commands.yaml`** - Shell commands to run test scripts from HA
+
+### Example: Program Address from HA UI
+
+Add to your `scripts.yaml`:
+
+```yaml
+program_dooya_address:
+  alias: "Program Dooya Address"
+  sequence:
+    - service: dooya_rs485.program_address
+      target:
+        entity_id: cover.my_curtain
+      data:
+        address_low: 2    # 0x02
+        address_high: 254 # 0xFE
+```
+
+### Example: Close Curtains at Sunset
+
+```yaml
+automation:
+  - alias: "Close Curtains at Sunset"
+    trigger:
+      - platform: sun
+        event: sunset
+        offset: "+00:30:00"
+    action:
+      - service: cover.close_cover
+        target:
+          entity_id: cover.living_room_curtain
+```
+
+## Protocol Details
+
+The integration uses the Dooya RS485 protocol:
+
+| Parameter | Value |
+|-----------|-------|
+| Start Code | `0x55` |
+| Read Command | `0x01` |
+| Write Command | `0x02` |
+| Control Command | `0x03` |
+| Address Programming | `0x04` |
+| CRC | CRC16 Modbus (little-endian) |
+| Default Address | `0xFEFE` |
+
+### Response Format (8 bytes)
+
+```
+[0] Start Code (0x55)
+[1] Device ID Low
+[2] Device ID High
+[3] Function Code
+[4] Echo/Status
+[5] Data Value  ← Position is here
+[6] CRC Low
+[7] CRC High
+```
 
 ## Support
 
 For bugs, feature requests, or support:
-- [Open an issue](https://github.com/shubham030/dooya-rs485/issues)
-- [View source code](https://github.com/shubham030/dooya-rs485)
+
+- 🐛 [Open an issue](https://github.com/shubham030/dooya-rs485/issues)
+- 💻 [View source code](https://github.com/shubham030/dooya-rs485)
+- 📖 [Discussions](https://github.com/shubham030/dooya-rs485/discussions)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ## License
 
@@ -155,8 +322,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Credits
 
-Created and maintained by [@shubham030](https://github.com/shubham030)
+- Created and maintained by [@shubham030](https://github.com/shubham030)
+- Dooya is a trademark of [Dooya](https://dooya.in/)
 
-## Contributing
+---
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+<p align="center">
+  <a href="https://www.buymeacoffee.com/shubham030">
+    <img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=☕&slug=shubham030&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" />
+  </a>
+</p>

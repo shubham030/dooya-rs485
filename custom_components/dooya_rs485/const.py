@@ -2,6 +2,7 @@
 from homeassistant.components.cover import CoverEntityFeature
 
 DOMAIN = "dooya_rs485"
+VERSION = "1.0.0"
 
 # Custom States
 STATE_ERROR = "error"  # State when the device reports an error condition
