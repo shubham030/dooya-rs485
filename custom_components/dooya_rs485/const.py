@@ -4,6 +4,17 @@ from homeassistant.components.cover import CoverEntityFeature
 DOMAIN = "dooya_rs485"
 VERSION = "1.0.0"
 
+# Configuration keys
+CONF_TCP_ADDRESS = "tcp_address"
+CONF_TCP_PORT = "tcp_port"
+CONF_DEVICE_ID_L = "device_id_l"
+CONF_DEVICE_ID_H = "device_id_h"
+CONF_COVERS = "covers"
+
+# Default values
+DEFAULT_TCP_PORT = 502
+DEFAULT_DEVICE_ID_H = 0xFE
+
 # Custom States
 STATE_ERROR = "error"  # State when the device reports an error condition
 

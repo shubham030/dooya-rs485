@@ -5,14 +5,25 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, discovery
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN
+from .const import (
+    CONF_COVERS,
+    CONF_DEVICE_ID_H,
+    CONF_DEVICE_ID_L,
+    CONF_TCP_ADDRESS,
+    CONF_TCP_PORT,
+    DEFAULT_DEVICE_ID_H,
+    DEFAULT_TCP_PORT,
+    DOMAIN,
+)
 from .dooya_rs485 import DooyaController
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,14 +36,68 @@ UPDATE_INTERVAL = timedelta(seconds=30)
 # Connection timeout for initial setup (gateway may still be booting)
 SETUP_TIMEOUT = 15
 
-# This integration is config entry only (no YAML configuration)
-CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+def hex_or_int(value: str | int) -> int:
+    """Convert hex string or int to int."""
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value, 0)
+    except ValueError:
+        raise vol.Invalid(f"Invalid value: {value}. Must be an integer or hex (e.g., 0xFE)")
+
+
+COVER_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_NAME): cv.string,
+        vol.Required(CONF_TCP_ADDRESS): cv.string,
+        vol.Optional(CONF_TCP_PORT, default=DEFAULT_TCP_PORT): cv.port,
+        vol.Required(CONF_DEVICE_ID_L): vol.All(vol.Coerce(hex_or_int), vol.Range(min=0, max=255)),
+        vol.Optional(CONF_DEVICE_ID_H, default=DEFAULT_DEVICE_ID_H): vol.All(
+            vol.Coerce(hex_or_int), vol.Range(min=0, max=255)
+        ),
+    }
+)
+
+CONFIG_SCHEMA = vol.Schema(
+    {
+        DOMAIN: vol.Schema(
+            {
+                vol.Optional(CONF_COVERS): vol.All(cv.ensure_list, [COVER_SCHEMA]),
+            }
+        )
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up the Dooya RS485 component from YAML configuration."""
+    hass.data.setdefault(DOMAIN, {"yaml_covers": [], "entries": {}})
+
+    if DOMAIN not in config:
+        return True
+
+    domain_config = config[DOMAIN]
+    covers = domain_config.get(CONF_COVERS, [])
+
+    if covers:
+        _LOGGER.info("Found %d Dooya covers in YAML configuration", len(covers))
+        hass.data[DOMAIN]["yaml_covers"] = covers
+        # Forward to cover platform for YAML-based setup
+        hass.async_create_task(
+            discovery.async_load_platform(
+                hass, Platform.COVER, DOMAIN, {"source": "yaml"}, config
+            )
+        )
+
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Dooya RS485 from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    
+    hass.data.setdefault(DOMAIN, {"yaml_covers": [], "entries": {}})
+
     _LOGGER.info(
         "Setting up Dooya RS485 entry: name=%s, tcp_address=%s, tcp_port=%d, device_id_l=0x%02X, device_id_h=0x%02X",
         entry.data.get("name"),
@@ -83,7 +148,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             f"Failed to fetch initial data from device: {err}"
         ) from err
 
-    hass.data[DOMAIN][entry.entry_id] = {
+    hass.data[DOMAIN]["entries"][entry.entry_id] = {
         "data": entry.data,
         "controller": controller,
         "coordinator": coordinator,
@@ -101,15 +166,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    if unload_ok and entry.entry_id in hass.data[DOMAIN]:
-        domain_data = hass.data[DOMAIN][entry.entry_id]
+    if unload_ok and entry.entry_id in hass.data[DOMAIN]["entries"]:
+        domain_data = hass.data[DOMAIN]["entries"][entry.entry_id]
         if "controller" in domain_data:
             try:
                 _LOGGER.info("Disconnecting from device")
                 await domain_data["controller"].disconnect()
             except Exception as err:
                 _LOGGER.error("Error disconnecting from device: %s", err)
-        hass.data[DOMAIN].pop(entry.entry_id)
+        hass.data[DOMAIN]["entries"].pop(entry.entry_id)
         _LOGGER.info("Successfully unloaded Dooya RS485 entry")
     else:
         _LOGGER.warning("Failed to unload platforms")
