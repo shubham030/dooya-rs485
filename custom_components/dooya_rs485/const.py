@@ -5,7 +5,7 @@ layer (``dooya_rs485.py``) can be imported and unit-tested standalone.
 """
 
 DOMAIN = "dooya_rs485"
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 # RS485 Protocol Constants
 START_CODE = 0x55  # Start byte for all commands
@@ -22,6 +22,7 @@ CURTAIN_COMMAND_STOP = 0x03      # Stop curtain command
 CURTAIN_COMMAND_PERCENT = 0x04   # Set position command
 CURTAIN_COMMAND_DELETE = 0x07    # Delete trip (stroke) command
 CURTAIN_COMMAND_RESET = 0x08     # Restore factory settings command
+CURTAIN_COMMAND_TOGGLE = 0x0F    # Negate command: open if last was close, else close
 
 # Read/Write Registers (data addresses)
 CURTAIN_READ_WRITE_ADDR_LOW = 0x00       # Device address low byte

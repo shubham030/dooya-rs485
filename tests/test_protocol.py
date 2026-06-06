@@ -182,6 +182,65 @@ def test_read_device_attributes_decodes_all_registers():
     }
 
 
+# --- Toggle command ----------------------------------------------------------
+
+def test_toggle_sends_negate_command():
+    c = _controller()
+    sent = {}
+
+    async def _capture(cmd):
+        sent["cmd"] = cmd
+        return _frame(0x03, 0x0F)
+
+    c._send_command_with_retry = _capture
+    asyncio.run(c.toggle())
+    assert sent["cmd"] == bytes([const.CURTAIN_COMMAND, const.CURTAIN_COMMAND_TOGGLE])
+    assert const.CURTAIN_COMMAND_TOGGLE == 0x0F
+
+
+# --- read_status / stroke detection -----------------------------------------
+
+def _status_responder(position_byte, motor_byte):
+    async def _fake(cmd):
+        register = cmd[1]
+        if register == const.CURTAIN_READ_WRITE_PERCENT:
+            return _frame(0x01, 0x01, position_byte)
+        if register == const.CURTAIN_READ_WRITE_MOTOR_STATUS:
+            return _frame(0x01, 0x01, motor_byte)
+        return None
+
+    return _fake
+
+
+def test_read_status_stroke_set():
+    c = _controller()
+    c._send_command_with_retry = _status_responder(0x1E, const.MOTOR_STATUS_CLOSING)
+    status = asyncio.run(c.read_status())
+    assert status == {"position": 30, "motor_status": const.MOTOR_STATUS_CLOSING, "stroke_set": True}
+
+
+def test_read_status_no_stroke():
+    c = _controller()
+    c._send_command_with_retry = _status_responder(const.POSITION_NO_STROKE, const.MOTOR_STATUS_STOPPED)
+    status = asyncio.run(c.read_status())
+    assert status["position"] is None
+    assert status["stroke_set"] is False
+
+
+def test_read_status_unknown_position():
+    c = _controller()
+    # Position register unreadable -> stroke_set unknown (None), not False.
+    async def _fake(cmd):
+        if cmd[1] == const.CURTAIN_READ_WRITE_MOTOR_STATUS:
+            return _frame(0x01, 0x01, const.MOTOR_STATUS_STOPPED)
+        return None
+
+    c._send_command_with_retry = _fake
+    status = asyncio.run(c.read_status())
+    assert status["position"] is None
+    assert status["stroke_set"] is None
+
+
 # --- Address programming validation -----------------------------------------
 
 @pytest.mark.parametrize("low,high", [(0x00, 0x10), (0xFF, 0x10), (0x10, 0x00), (0x10, 0xFF)])

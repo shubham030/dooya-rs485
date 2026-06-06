@@ -175,11 +175,16 @@ class DooyaCover(CoordinatorEntity, CoverEntity):
         }
         return attrs
 
+    async def _async_refresh_after_command(self) -> None:
+        """Poll quickly for a while so the position tracks the movement."""
+        self.coordinator.async_boost_polling()
+        await self.coordinator.async_request_refresh()
+
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
         try:
             await self._controller.open()
-            await self.coordinator.async_request_refresh()
+            await self._async_refresh_after_command()
         except Exception as err:
             _LOGGER.error("Error opening cover: %s", err)
 
@@ -187,7 +192,7 @@ class DooyaCover(CoordinatorEntity, CoverEntity):
         """Close the cover."""
         try:
             await self._controller.close()
-            await self.coordinator.async_request_refresh()
+            await self._async_refresh_after_command()
         except Exception as err:
             _LOGGER.error("Error closing cover: %s", err)
 
@@ -195,7 +200,7 @@ class DooyaCover(CoordinatorEntity, CoverEntity):
         """Stop the cover."""
         try:
             await self._controller.stop()
-            await self.coordinator.async_request_refresh()
+            await self._async_refresh_after_command()
         except Exception as err:
             _LOGGER.error("Error stopping cover: %s", err)
 
@@ -206,9 +211,17 @@ class DooyaCover(CoordinatorEntity, CoverEntity):
             if position is not None:
                 _LOGGER.info("Setting cover position to %d%%", position)
                 await self._controller.set_cover_position(position)
-                await self.coordinator.async_request_refresh()
+                await self._async_refresh_after_command()
         except Exception as err:
             _LOGGER.error("Error setting cover position: %s", err)
+
+    async def async_toggle(self, **kwargs: Any) -> None:
+        """Toggle the cover using the motor's native negate command (0x0F)."""
+        try:
+            await self._controller.toggle()
+            await self._async_refresh_after_command()
+        except Exception as err:
+            _LOGGER.error("Error toggling cover: %s", err)
 
     async def async_program_address(self, address_low: int, address_high: int) -> None:
         """Program new device address."""

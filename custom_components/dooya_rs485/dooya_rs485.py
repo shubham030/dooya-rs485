@@ -14,6 +14,7 @@ from .const import (
     CURTAIN_COMMAND_PERCENT,
     CURTAIN_COMMAND_DELETE,
     CURTAIN_COMMAND_RESET,
+    CURTAIN_COMMAND_TOGGLE,
     CURTAIN_READ_WRITE_PERCENT,
     CURTAIN_READ_WRITE_DIRECTION,
     CURTAIN_READ_WRITE_MANUAL_ENABLE,
@@ -165,6 +166,15 @@ class DooyaController:
         """Set the cover position (0-100)."""
         _LOGGER.debug("Setting cover position to %d%%", position)
         rs485_command = bytes([CURTAIN_COMMAND, CURTAIN_COMMAND_PERCENT, position])
+        return await self._send_command_with_retry(rs485_command)
+
+    async def toggle(self) -> Optional[bytes]:
+        """Toggle the curtain using the motor's native negate command.
+
+        The motor opens if the last command was close, otherwise it closes.
+        """
+        _LOGGER.debug("Sending toggle (negate) command")
+        rs485_command = bytes([CURTAIN_COMMAND, CURTAIN_COMMAND_TOGGLE])
         return await self._send_command_with_retry(rs485_command)
 
     async def _read_register(self, register: int) -> Optional[int]:
@@ -368,10 +378,30 @@ class DooyaController:
         return crc.to_bytes(2, byteorder="little")
 
     async def read_status(self) -> dict:
-        """Read the runtime status used for polling (position + motor status)."""
+        """Read the runtime status used for polling.
+
+        Returns ``position`` (0-100 or None), ``motor_status`` and ``stroke_set``
+        (True/False when known, None when the position could not be read).
+        """
+        raw_position = await self._read_register(CURTAIN_READ_WRITE_PERCENT)
+        motor_status = await self.read_motor_status()
+
+        position: Optional[int] = None
+        stroke_set: Optional[bool] = None
+        if raw_position is not None:
+            if raw_position == POSITION_NO_STROKE:
+                stroke_set = False
+                _LOGGER.warning("Device reports stroke is not set")
+            elif raw_position <= POSITION_MAX:
+                position = raw_position
+                stroke_set = True
+            else:
+                _LOGGER.debug("Invalid position value received: 0x%02X", raw_position)
+
         return {
-            "position": await self.read_cover_position(),
-            "motor_status": await self.read_motor_status(),
+            "position": position,
+            "motor_status": motor_status,
+            "stroke_set": stroke_set,
         }
 
     async def read_device_attributes(self) -> dict:
