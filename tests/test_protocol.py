@@ -198,6 +198,32 @@ def test_toggle_sends_negate_command():
     assert const.CURTAIN_COMMAND_TOGGLE == 0x0F
 
 
+# --- write_register (config) -------------------------------------------------
+
+def test_write_register_sends_correct_frame():
+    c = _controller()
+    sent = {}
+
+    async def _capture(cmd):
+        sent["cmd"] = cmd
+        return _frame(0x02, 0x03, 0x01)  # device ack
+
+    c._send_command_with_retry = _capture
+    ok = asyncio.run(c.write_register(0x03, 0x01))
+    assert ok is True
+    assert sent["cmd"] == bytes([const.CURTAIN_WRITE, 0x03, 0x01, 0x01])
+
+
+def test_write_register_returns_false_without_ack():
+    c = _controller()
+
+    async def _fake(_cmd):
+        return None
+
+    c._send_command_with_retry = _fake
+    assert asyncio.run(c.write_register(0x27, 0x02)) is False
+
+
 # --- read_status / stroke detection -----------------------------------------
 
 def _status_responder(position_byte, motor_byte):

@@ -18,7 +18,7 @@ from .dooya_rs485 import DooyaController
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.COVER]
+PLATFORMS = [Platform.COVER, Platform.SELECT, Platform.SWITCH]
 
 # Update interval for polling while idle
 UPDATE_INTERVAL = timedelta(seconds=30)

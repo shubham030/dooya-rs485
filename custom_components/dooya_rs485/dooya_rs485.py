@@ -7,6 +7,7 @@ from typing import Optional
 from .const import (
     START_CODE,
     CURTAIN_READ,
+    CURTAIN_WRITE,
     CURTAIN_COMMAND,
     CURTAIN_COMMAND_OPEN,
     CURTAIN_COMMAND_CLOSE,
@@ -219,6 +220,18 @@ class DooyaController:
     async def read_motor_status(self) -> Optional[int]:
         """Read the motor status (see MOTOR_STATUS_* constants)."""
         return await self._read_register(CURTAIN_READ_WRITE_MOTOR_STATUS)
+
+    async def write_register(self, register: int, value: int) -> bool:
+        """Write a single-byte configuration register.
+
+        Returns True if the device returned a valid (framed, CRC-checked) ack.
+        """
+        rs485_command = bytes([CURTAIN_WRITE, register, 0x01, value])
+        response = await self._send_command_with_retry(rs485_command)
+        if response is None:
+            _LOGGER.warning("No ack writing 0x%02X to register 0x%02X", value, register)
+            return False
+        return True
 
     async def read_direction(self) -> Optional[int]:
         """Read the motor default direction (config)."""
