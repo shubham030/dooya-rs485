@@ -20,7 +20,7 @@
 - 🎛️ Control Dooya curtain motors (open, close, stop, toggle)
 - 📍 Set specific positions (0-100%)
 - 📊 Live position and motor status (opening / closing / stopped)
-- ⚙️ Expose device configuration (direction, hand-pull, switch types)
+- ⚙️ Adjust device configuration from the UI (direction, hand-pull, switch types)
 - 🔧 Program device addresses
 - 🏠 Support for multiple curtains
 - 🏃 Smooth position tracking — polls faster while the motor is moving
@@ -138,6 +138,22 @@ read once when the integration loads.
 > register (`0x05`), per the Dooya protocol spec — `0x01` = opening, `0x02` =
 > closing, `0x00` = stopped, `0x03` = setting. (There is no "error" status in
 > the protocol.)
+
+## Configuration Entities
+
+Each curtain also creates writable configuration entities (grouped under the
+device, in the **Configuration** category). These read their initial value once
+at startup and write back to the motor when changed:
+
+| Entity | Type | Register | Purpose |
+|--------|------|----------|---------|
+| **Reverse direction** | switch | `0x03` | Flip the motor direction if open/close are swapped — fix a reversed motor without re-wiring |
+| **Hand-pull start** | switch | `0x04` | Enable/disable starting the motor by pulling the curtain by hand |
+| **Passive switch type** | select | `0x27` | Weak-current external switch type (double bounce / non-bounce / DC246 / single-key cycle) |
+| **Active switch type** | select | `0x28` | High-current external switch type (non-rebound / hotel mode / rebound) |
+
+> These reflect the value read at startup; if you change a setting through the
+> physical remote, reload the integration to refresh them.
 
 ## Auto-Recovery
 

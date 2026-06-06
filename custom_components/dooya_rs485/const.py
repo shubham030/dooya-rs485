@@ -5,7 +5,7 @@ layer (``dooya_rs485.py``) can be imported and unit-tested standalone.
 """
 
 DOMAIN = "dooya_rs485"
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 # RS485 Protocol Constants
 START_CODE = 0x55  # Start byte for all commands

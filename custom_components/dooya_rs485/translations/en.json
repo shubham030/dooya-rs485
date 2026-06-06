@@ -68,5 +68,34 @@
       "title": "Curtain travel limits not set",
       "description": "The Dooya motor for \"{name}\" reports that its stroke (travel limits) has not been calibrated, so position control is unavailable. To fix: fully open the curtain, then fully close it (using the open/close controls or the physical buttons). Position reporting will then work from 0-100% and this issue will clear automatically."
     }
+  },
+  "entity": {
+    "select": {
+      "passive_switch_type": {
+        "name": "Passive switch type",
+        "state": {
+          "double_bounce": "Double bounce",
+          "non_bounce": "Non-bounce",
+          "dc246_electronic": "DC246 electronic",
+          "single_key_cycle": "Single-key cycle"
+        }
+      },
+      "active_switch_type": {
+        "name": "Active switch type",
+        "state": {
+          "double_key_non_rebound": "Double-key non-rebound",
+          "hotel_mode": "Hotel mode",
+          "double_key_rebound": "Double-key rebound"
+        }
+      }
+    },
+    "switch": {
+      "reverse_direction": {
+        "name": "Reverse direction"
+      },
+      "hand_pull_start": {
+        "name": "Hand-pull start"
+      }
+    }
   }
 }
