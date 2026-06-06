@@ -118,15 +118,23 @@ All standard Home Assistant cover services are supported:
 
 ## Attributes
 
-The integration exposes several attributes for monitoring device status:
+The integration exposes several attributes. `motor_status` is read every poll
+cycle; the remaining attributes are device *configuration* registers and are
+read once when the integration loads.
 
 | Attribute | Description | Values |
 |-----------|-------------|--------|
 | `current_position` | Current position | 0-100% |
-| `motor_status` | Motor status | stopped / running / error |
-| `active_switch_status` | Active switch status | normal / triggered |
-| `passive_switch_status` | Passive switch status | normal / triggered |
-| `handle_status` | Handle operation status | normal / operated |
+| `motor_status` | Live motor status | stopped / opening / closing / setting |
+| `direction` | Configured motor direction | default / reversed |
+| `hand_pull_start` | Manual (hand-pull) start setting | enabled / disabled |
+| `passive_switch_type` | Passive (weak current) switch type | double_bounce / non_bounce / dc246_electronic / single_key_cycle |
+| `active_switch_type` | Active (high current) switch type | double_key_non_rebound / hotel_mode / double_key_rebound |
+
+> **Note:** Opening/closing/stopped state is derived from the motor status
+> register (`0x05`), per the Dooya protocol spec — `0x01` = opening, `0x02` =
+> closing, `0x00` = stopped, `0x03` = setting. (There is no "error" status in
+> the protocol.)
 
 ## Auto-Recovery
 
@@ -284,18 +292,22 @@ The integration uses the Dooya RS485 protocol:
 | CRC | CRC16 Modbus (little-endian) |
 | Default Address | `0xFEFE` |
 
-### Response Format (8 bytes)
+### Read Response Format (8 bytes)
 
 ```
 [0] Start Code (0x55)
 [1] Device ID Low
 [2] Device ID High
-[3] Function Code
-[4] Echo/Status
-[5] Data Value  ← Position is here
+[3] Function Code (0x01)
+[4] Data Length (0x01)
+[5] Data Value  ← Position / register value is here
 [6] CRC Low
 [7] CRC High
 ```
+
+> Control-command replies (`0x03`) are **7 bytes** — they echo the data address
+> at `[4]` and place the CRC at `[5:7]` (no data byte). Responses are validated
+> for start byte, source device address, and CRC before use.
 
 ## Support
 

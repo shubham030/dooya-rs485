@@ -8,12 +8,14 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+
 def hex_or_int(value):
     """Convert hex string to int or return as is if already int."""
     try:
         return int(value, 0)
-    except ValueError:
+    except (ValueError, TypeError):
         raise vol.Invalid("Must be an integer or hex (e.g., 0xFE)")
+
 
 def validate_device_id(value):
     """Validate device ID is within valid range."""
@@ -21,6 +23,7 @@ def validate_device_id(value):
     if not 0 <= value <= 255:
         raise vol.Invalid("Device ID must be between 0 and 255")
     return value
+
 
 DATA_SCHEMA = vol.Schema({
     vol.Required("name", description="Name of the curtain"): str,
@@ -36,11 +39,11 @@ DATA_SCHEMA = vol.Schema({
     ): str,
 })
 
+
 class DooyaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Dooya RS485."""
 
     VERSION = 1
-    CONNECTION_CLASS = "local_polling"
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
@@ -48,14 +51,12 @@ class DooyaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                # Validate device IDs
-                device_id_l = validate_device_id(user_input["device_id_l"])
-                device_id_h = validate_device_id(user_input["device_id_h"])
-                
-                # Update user input with validated values
-                user_input["device_id_l"] = device_id_l
-                user_input["device_id_h"] = device_id_h
-                
+                # Validate device IDs (raises vol.Invalid on bad input)
+                user_input["device_id_l"] = validate_device_id(user_input["device_id_l"])
+                user_input["device_id_h"] = validate_device_id(user_input["device_id_h"])
+            except (vol.Invalid, ValueError):
+                errors["base"] = "invalid_device_id"
+            else:
                 # Create unique ID from name
                 unique_id = f"dooya_{user_input['name'].lower().replace(' ', '_')}"
                 await self.async_set_unique_id(unique_id)
@@ -65,8 +66,6 @@ class DooyaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     title=user_input["name"],
                     data=user_input
                 )
-            except ValueError as err:
-                errors["base"] = str(err)
 
         return self.async_show_form(
             step_id="user",
@@ -94,17 +93,19 @@ class DooyaOptionsFlowHandler(config_entries.OptionsFlow):
 
         if user_input is not None:
             try:
-                # Validate device IDs
-                device_id_l = validate_device_id(user_input["device_id_l"])
-                device_id_h = validate_device_id(user_input["device_id_h"])
-                
-                # Update user input with validated values
-                user_input["device_id_l"] = device_id_l
-                user_input["device_id_h"] = device_id_h
-                
-                return self.async_create_entry(title="", data=user_input)
-            except ValueError as err:
-                errors["base"] = str(err)
+                # Validate device IDs (raises vol.Invalid on bad input)
+                user_input["device_id_l"] = validate_device_id(user_input["device_id_l"])
+                user_input["device_id_h"] = validate_device_id(user_input["device_id_h"])
+            except (vol.Invalid, ValueError):
+                errors["base"] = "invalid_device_id"
+            else:
+                # Persist edits into the entry data and reload (via the update
+                # listener) so the new connection settings take effect.
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data={**self.config_entry.data, **user_input},
+                )
+                return self.async_create_entry(title="", data={})
 
         return self.async_show_form(
             step_id="init",
@@ -123,11 +124,11 @@ class DooyaOptionsFlowHandler(config_entries.OptionsFlow):
                 ): int,
                 vol.Required(
                     "device_id_l",
-                    default=hex(self.config_entry.data.get("device_id_l"))
+                    default=hex(self.config_entry.data.get("device_id_l", 0))
                 ): str,
                 vol.Required(
                     "device_id_h",
-                    default=hex(self.config_entry.data.get("device_id_h"))
+                    default=hex(self.config_entry.data.get("device_id_h", 0))
                 ): str,
             }),
             errors=errors
