@@ -2,7 +2,7 @@
 import asyncio
 import binascii
 import logging
-from typing import Optional, Tuple
+from typing import Optional
 
 from .const import (
     START_CODE,
@@ -16,11 +16,14 @@ from .const import (
     CURTAIN_COMMAND_RESET,
     CURTAIN_READ_WRITE_PERCENT,
     CURTAIN_READ_WRITE_DIRECTION,
-    CURTAIN_READ_WRITE_HANDLE,
+    CURTAIN_READ_WRITE_MANUAL_ENABLE,
     CURTAIN_READ_WRITE_MOTOR_STATUS,
     CURTAIN_READ_WRITE_SWITCH_PASSIVE,
     CURTAIN_READ_WRITE_SWITCH_ACTIVE,
-    CURTAIN_READ_WRITE_VERSION,
+    CURTAIN_READ_WRITE_SOFTWARE_VERSION,
+    CURTAIN_READ_WRITE_PROTOCOL_VERSION,
+    POSITION_NO_STROKE,
+    POSITION_MAX,
     DEVICE_ADDRESS_SLAVE_REQUEST,
     DEVICE_ADDRESS_WRITE,
     DEVICE_ADDRESS_DATA_ADDR,
@@ -34,6 +37,10 @@ CONNECTION_TIMEOUT = 10.0  # Timeout for establishing connection
 COMMAND_TIMEOUT = 5.0  # Timeout for command response
 RECONNECT_DELAY = 2.0  # Delay between reconnection attempts
 MAX_RETRIES = 3  # Maximum number of retries for commands
+
+# Read responses are framed as:
+#   [0] start  [1] id_l  [2] id_h  [3] function  [4] data length  [5..] data  [-2:] CRC
+DATA_OFFSET = 5  # Index of the first data byte in a read response
 
 
 class DooyaController:
@@ -78,10 +85,10 @@ class DooyaController:
         self._connecting = True
         try:
             _LOGGER.info("Attempting to connect to %s:%s", self.tcp_address, self.tcp_port)
-            
+
             # Clean up any existing connection first
             await self._cleanup_connection()
-            
+
             # Connect with timeout
             self._reader, self._writer = await asyncio.wait_for(
                 asyncio.open_connection(self.tcp_address, self.tcp_port),
@@ -90,7 +97,7 @@ class DooyaController:
             self._connected = True
             _LOGGER.info("Successfully connected to %s:%s", self.tcp_address, self.tcp_port)
             return True
-            
+
         except asyncio.TimeoutError:
             _LOGGER.error("Connection timeout to %s:%s", self.tcp_address, self.tcp_port)
             self._connected = False
@@ -126,7 +133,7 @@ class DooyaController:
         """Ensure connection is active, reconnect if necessary."""
         if self.is_connected:
             return True
-        
+
         _LOGGER.info("Connection lost or not established, attempting to reconnect")
         return await self.connect()
 
@@ -155,78 +162,77 @@ class DooyaController:
         return await self._send_command_with_retry(rs485_command)
 
     async def set_cover_position(self, position: int) -> Optional[bytes]:
-        """Set the cover position."""
+        """Set the cover position (0-100)."""
         _LOGGER.debug("Setting cover position to %d%%", position)
         rs485_command = bytes([CURTAIN_COMMAND, CURTAIN_COMMAND_PERCENT, position])
         return await self._send_command_with_retry(rs485_command)
 
+    async def _read_register(self, register: int) -> Optional[int]:
+        """Read a single register and return its data byte, or None on failure."""
+        rs485_command = bytes([CURTAIN_READ, register, 0x01])
+        response = await self._send_command_with_retry(rs485_command)
+
+        if response is None:
+            _LOGGER.debug("No response for read of register 0x%02X", register)
+            return None
+
+        # A valid read response is at least 6 bytes (header + length + data, plus CRC).
+        if len(response) <= DATA_OFFSET:
+            _LOGGER.debug(
+                "Read response for register 0x%02X too short: %d bytes",
+                register,
+                len(response),
+            )
+            return None
+
+        return response[DATA_OFFSET]
+
     async def read_cover_position(self) -> Optional[int]:
-        """Read the cover position."""
-        try:
-            _LOGGER.debug("Reading cover position")
-            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_PERCENT, 0x01])
-            response = await self._send_command_with_retry(rs485_command)
-
-            if response is None:
-                _LOGGER.debug("No response received from device for position read")
-                return None
-
-            # Handle status-only response
-            if len(response) == 2:
-                _LOGGER.debug("Received status-only response for position read")
-                return None
-
-            # Handle data response
-            if len(response) < 6:
-                _LOGGER.debug("Invalid response length for position read: %d", len(response))
-                return None
-
-            position = response[5]
-            _LOGGER.debug("Raw position from device: 0x%02X", position)
-
-            # Handle case where stroke is not set (0xFF)
-            if position == 0xFF:
-                _LOGGER.warning("Device reports stroke is not set")
-                return None
-
-            # Position should be between 0x00 (fully closed) and 0x64 (fully open)
-            if position > 0x64:
-                _LOGGER.debug("Invalid position value received: 0x%02X", position)
-                return None
-
-            _LOGGER.debug("Cover position read: %d%%", position)
-            return position
-        except Exception as e:
-            _LOGGER.error("Error reading cover position: %s", e)
+        """Read the cover position (0-100), or None if unknown/stroke not set."""
+        position = await self._read_register(CURTAIN_READ_WRITE_PERCENT)
+        if position is None:
             return None
 
-    async def read_cover_direction(self) -> Optional[int]:
-        """Read the cover direction."""
-        try:
-            _LOGGER.debug("Reading cover direction")
-            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_DIRECTION, 0x01])
-            response = await self._send_command_with_retry(rs485_command)
+        _LOGGER.debug("Raw position from device: 0x%02X", position)
 
-            if response is None:
-                _LOGGER.debug("No response received from device for direction read")
-                return None
-
-            # Handle status-only response
-            if len(response) == 2:
-                _LOGGER.debug("Received status-only response for direction read")
-                return None
-
-            # Handle data response
-            if len(response) < 6:
-                _LOGGER.debug("Invalid response length for direction read: %d", len(response))
-                return None
-
-            direction = response[5]
-            _LOGGER.debug("Cover direction read: 0x%02X", direction)
-            return direction
-        except Exception as e:
-            _LOGGER.error("Error reading cover direction: %s", e)
+        if position == POSITION_NO_STROKE:
+            _LOGGER.warning("Device reports stroke is not set")
             return None
+
+        if position > POSITION_MAX:
+            _LOGGER.debug("Invalid position value received: 0x%02X", position)
+            return None
+
+        _LOGGER.debug("Cover position read: %d%%", position)
+        return position
+
+    async def read_motor_status(self) -> Optional[int]:
+        """Read the motor status (see MOTOR_STATUS_* constants)."""
+        return await self._read_register(CURTAIN_READ_WRITE_MOTOR_STATUS)
+
+    async def read_direction(self) -> Optional[int]:
+        """Read the motor default direction (config)."""
+        return await self._read_register(CURTAIN_READ_WRITE_DIRECTION)
+
+    async def read_manual_enable(self) -> Optional[int]:
+        """Read the manual (hand-pull) start enable setting (config)."""
+        return await self._read_register(CURTAIN_READ_WRITE_MANUAL_ENABLE)
+
+    async def read_switch_type_passive(self) -> Optional[int]:
+        """Read the passive (weak current) external switch type (config)."""
+        return await self._read_register(CURTAIN_READ_WRITE_SWITCH_PASSIVE)
+
+    async def read_switch_type_active(self) -> Optional[int]:
+        """Read the active (high current) external switch type (config)."""
+        return await self._read_register(CURTAIN_READ_WRITE_SWITCH_ACTIVE)
+
+    async def read_software_version(self) -> Optional[int]:
+        """Read the software/firmware version (register 0xFD, 0-255)."""
+        return await self._read_register(CURTAIN_READ_WRITE_SOFTWARE_VERSION)
+
+    async def read_protocol_version(self) -> Optional[int]:
+        """Read the protocol version (register 0xFE, fixed e.g. 0xA4)."""
+        return await self._read_register(CURTAIN_READ_WRITE_PROTOCOL_VERSION)
 
     async def _send_command_with_retry(self, rs485_command: bytes) -> Optional[bytes]:
         """Send RS485 command with automatic retry on failure."""
@@ -235,7 +241,7 @@ class DooyaController:
                 response = await self.send_rs485_command(rs485_command)
                 if response is not None:
                     return response
-                
+
                 if attempt < MAX_RETRIES - 1:
                     _LOGGER.debug("Command failed, retrying (attempt %d/%d)", attempt + 2, MAX_RETRIES)
                     await asyncio.sleep(RECONNECT_DELAY)
@@ -243,7 +249,7 @@ class DooyaController:
                 _LOGGER.debug("Command attempt %d failed: %s", attempt + 1, e)
                 if attempt < MAX_RETRIES - 1:
                     await asyncio.sleep(RECONNECT_DELAY)
-        
+
         _LOGGER.warning("Command failed after %d attempts", MAX_RETRIES)
         return None
 
@@ -296,29 +302,7 @@ class DooyaController:
             # Log raw response for debugging
             _LOGGER.debug("Raw response received: %s", binascii.hexlify(response).decode())
 
-            # Basic response validation
-            if len(response) < 2:  # Minimum response is just status
-                _LOGGER.debug("Response too short: %d bytes", len(response))
-                return None
-
-            # Check if response is just a status (2 bytes)
-            if len(response) == 2:
-                _LOGGER.debug("Received status-only response")
-                return response
-
-            # For longer responses, validate CRC
-            if len(response) >= 4:  # Response with data should have CRC
-                received_crc = response[-2:]
-                calculated_crc = self.calculate_crc(response[:-2])
-                if received_crc != calculated_crc:
-                    _LOGGER.warning(
-                        "CRC mismatch - Received: %s, Calculated: %s",
-                        binascii.hexlify(received_crc).decode(),
-                        binascii.hexlify(calculated_crc).decode(),
-                    )
-                    return None
-
-            return response
+            return self._validate_response(response)
 
         except asyncio.TimeoutError:
             _LOGGER.warning("Timeout during command send/receive")
@@ -333,8 +317,45 @@ class DooyaController:
             await self._cleanup_connection()
             return None
 
+    def _validate_response(self, response: bytes) -> Optional[bytes]:
+        """Validate framing, source address and CRC of a device response."""
+        # Minimum useful response is a full frame: start + addr(2) + fn + crc(2).
+        if len(response) < 6:
+            _LOGGER.debug("Response too short: %d bytes", len(response))
+            return None
+
+        # Validate start byte.
+        if response[0] != START_CODE:
+            _LOGGER.warning("Unexpected start byte: 0x%02X", response[0])
+            return None
+
+        # Validate the frame came from the device we addressed. On a multi-drop
+        # RS485 bus this guards against cross-talk from other motors.
+        if response[1] != self.device_id_l or response[2] != self.device_id_h:
+            _LOGGER.warning(
+                "Response from unexpected device 0x%02X%02X (expected 0x%02X%02X)",
+                response[2],
+                response[1],
+                self.device_id_h,
+                self.device_id_l,
+            )
+            return None
+
+        # Validate CRC (last two bytes, little-endian).
+        received_crc = response[-2:]
+        calculated_crc = self.calculate_crc(response[:-2])
+        if received_crc != calculated_crc:
+            _LOGGER.warning(
+                "CRC mismatch - Received: %s, Calculated: %s",
+                binascii.hexlify(received_crc).decode(),
+                binascii.hexlify(calculated_crc).decode(),
+            )
+            return None
+
+        return response
+
     def calculate_crc(self, data: bytes) -> bytes:
-        """Calculate CRC16 Modbus."""
+        """Calculate CRC16 Modbus (little-endian byte order)."""
         crc = 0xFFFF
         for byte in data:
             crc ^= byte
@@ -346,149 +367,35 @@ class DooyaController:
                     crc >>= 1
         return crc.to_bytes(2, byteorder="little")
 
-    async def read_motor_status(self) -> Optional[int]:
-        """Read the motor status."""
-        try:
-            _LOGGER.debug("Reading motor status")
-            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_MOTOR_STATUS, 0x01])
-            response = await self._send_command_with_retry(rs485_command)
+    async def read_status(self) -> dict:
+        """Read the runtime status used for polling (position + motor status)."""
+        return {
+            "position": await self.read_cover_position(),
+            "motor_status": await self.read_motor_status(),
+        }
 
-            if response is None:
-                _LOGGER.debug("No response received from device for motor status")
-                return None
-
-            # Handle status-only response
-            if len(response) == 2:
-                _LOGGER.debug("Received status-only response for motor status read")
-                return None
-
-            # Handle data response
-            if len(response) < 6:
-                _LOGGER.debug("Invalid response length for motor status read: %d", len(response))
-                return None
-
-            status = response[5]
-            _LOGGER.debug("Motor status read: 0x%02X", status)
-            return status
-        except Exception as e:
-            _LOGGER.error("Error reading motor status: %s", e)
-            return None
-
-    async def read_switch_status(self) -> Tuple[Optional[int], Optional[int]]:
-        """Read both active and passive switch status."""
-        try:
-            _LOGGER.debug("Reading switch status")
-            active_cmd = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_SWITCH_ACTIVE, 0x01])
-            passive_cmd = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_SWITCH_PASSIVE, 0x01])
-
-            active_response = await self._send_command_with_retry(active_cmd)
-            passive_response = await self._send_command_with_retry(passive_cmd)
-
-            active_status = None
-            passive_status = None
-
-            if active_response is not None and len(active_response) >= 6:
-                active_status = active_response[5]
-            if passive_response is not None and len(passive_response) >= 6:
-                passive_status = passive_response[5]
-
-            _LOGGER.debug(
-                "Switch status read - Active: %s, Passive: %s",
-                f"0x{active_status:02X}" if active_status is not None else "None",
-                f"0x{passive_status:02X}" if passive_status is not None else "None",
-            )
-            return active_status, passive_status
-        except Exception as e:
-            _LOGGER.error("Error reading switch status: %s", e)
-            return None, None
-
-    async def read_version(self) -> Optional[int]:
-        """Read the device version."""
-        try:
-            _LOGGER.debug("Reading device version")
-            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_VERSION, 0x01])
-            response = await self._send_command_with_retry(rs485_command)
-
-            if response is None:
-                _LOGGER.debug("No response received from device for version")
-                return None
-
-            # Handle status-only response
-            if len(response) == 2:
-                _LOGGER.debug("Received status-only response for version read")
-                return None
-
-            # Handle data response
-            if len(response) < 6:
-                _LOGGER.debug("Invalid response length for version read: %d", len(response))
-                return None
-
-            version = response[5]
-            _LOGGER.debug("Device version read: 0x%02X", version)
-            return version
-        except Exception as e:
-            _LOGGER.error("Error reading device version: %s", e)
-            return None
-
-    async def read_handle_status(self) -> Optional[int]:
-        """Read the handle status."""
-        try:
-            _LOGGER.debug("Reading handle status")
-            rs485_command = bytes([CURTAIN_READ, CURTAIN_READ_WRITE_HANDLE, 0x01])
-            response = await self._send_command_with_retry(rs485_command)
-
-            if response is None:
-                _LOGGER.debug("No response received from device for handle status")
-                return None
-
-            # Handle status-only response
-            if len(response) == 2:
-                _LOGGER.debug("Received status-only response for handle status read")
-                return None
-
-            # Handle data response
-            if len(response) < 6:
-                _LOGGER.debug("Invalid response length for handle status read: %d", len(response))
-                return None
-
-            status = response[5]
-            _LOGGER.debug("Handle status read: 0x%02X", status)
-            return status
-        except Exception as e:
-            _LOGGER.error("Error reading handle status: %s", e)
-            return None
+    async def read_device_attributes(self) -> dict:
+        """Read static device configuration/identity (read once at setup)."""
+        return {
+            "direction": await self.read_direction(),
+            "manual_enable": await self.read_manual_enable(),
+            "switch_type_passive": await self.read_switch_type_passive(),
+            "switch_type_active": await self.read_switch_type_active(),
+            "software_version": await self.read_software_version(),
+            "protocol_version": await self.read_protocol_version(),
+        }
 
     async def reset(self) -> Optional[bytes]:
-        """Reset the device."""
+        """Restore the device to factory settings (also clears the stroke)."""
         _LOGGER.debug("Sending reset command")
         rs485_command = bytes([CURTAIN_COMMAND, CURTAIN_COMMAND_RESET])
         return await self._send_command_with_retry(rs485_command)
 
     async def delete(self) -> Optional[bytes]:
-        """Delete the device configuration."""
+        """Delete the device trip/stroke configuration."""
         _LOGGER.debug("Sending delete command")
         rs485_command = bytes([CURTAIN_COMMAND, CURTAIN_COMMAND_DELETE])
         return await self._send_command_with_retry(rs485_command)
-
-    async def read_all_status(self) -> dict:
-        """Read all status information in one call (more efficient for polling)."""
-        result = {
-            "position": None,
-            "motor_status": None,
-            "active_switch": None,
-            "passive_switch": None,
-            "handle_status": None,
-        }
-
-        # Read position first (most important)
-        result["position"] = await self.read_cover_position()
-        
-        # Read other status values
-        result["motor_status"] = await self.read_motor_status()
-        result["active_switch"], result["passive_switch"] = await self.read_switch_status()
-        result["handle_status"] = await self.read_handle_status()
-
-        return result
 
     async def program_device_address(self, new_id_l: int, new_id_h: int) -> bool:
         """Program new device address after button is pressed and held.

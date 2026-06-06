@@ -83,16 +83,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             f"Failed to fetch initial data from device: {err}"
         ) from err
 
+    # Read static device configuration/identity once (used for device info and
+    # diagnostic attributes). These registers don't change at runtime, so they
+    # are intentionally left out of the polling loop.
+    try:
+        device_attributes = await controller.read_device_attributes()
+    except Exception as err:
+        _LOGGER.warning("Could not read device attributes: %s", err)
+        device_attributes = {}
+
     hass.data[DOMAIN][entry.entry_id] = {
         "data": entry.data,
         "controller": controller,
         "coordinator": coordinator,
+        "device_attributes": device_attributes,
     }
+
+    # Reload the entry when its options/data change so edits take effect.
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     _LOGGER.info("Setting up cover platform")
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _LOGGER.info("Successfully set up Dooya RS485 entry")
     return True
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the config entry when its configuration changes."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -157,8 +175,8 @@ class DooyaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     # Return last known data if available, otherwise empty dict
                     return self.data if self.data else {}
 
-            # Read all status in one coordinated call
-            data = await self.controller.read_all_status()
+            # Read runtime status (position + motor status) in one coordinated call
+            data = await self.controller.read_status()
 
             # Reset error counter on success
             if self._consecutive_errors > 0:
