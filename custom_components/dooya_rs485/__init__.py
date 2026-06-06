@@ -7,20 +7,33 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN
+from .const import DOMAIN, MOTOR_STATUS_OPENING, MOTOR_STATUS_CLOSING
 from .dooya_rs485 import DooyaController
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.COVER]
 
-# Update interval for polling
+# Update interval for polling while idle
 UPDATE_INTERVAL = timedelta(seconds=30)
+
+# Faster polling while the motor is moving, so the position tracks smoothly
+MOVING_UPDATE_INTERVAL = timedelta(seconds=2)
+
+# Keep polling fast for a short window after a movement command, to bridge the
+# brief delay before the motor reports that it has started moving.
+MOVEMENT_BOOST_SECONDS = 8.0
+
+
+def _stroke_issue_id(entry_id: str) -> str:
+    """Return the repair-issue id for an entry's uncalibrated stroke."""
+    return f"stroke_not_set_{entry_id}"
 
 # Connection timeout for initial setup (gateway may still be booting)
 SETUP_TIMEOUT = 15
@@ -71,6 +84,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass,
         controller=controller,
         name=entry.data.get("name", "Dooya Cover"),
+        entry_id=entry.entry_id,
     )
 
     # Fetch initial data - if this fails, raise ConfigEntryNotReady
@@ -127,6 +141,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await domain_data["controller"].disconnect()
             except Exception as err:
                 _LOGGER.error("Error disconnecting from device: %s", err)
+        # Clear any repair issue raised for this entry.
+        ir.async_delete_issue(hass, DOMAIN, _stroke_issue_id(entry.entry_id))
         hass.data[DOMAIN].pop(entry.entry_id)
         _LOGGER.info("Successfully unloaded Dooya RS485 entry")
     else:
@@ -143,6 +159,7 @@ class DooyaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         controller: DooyaController,
         name: str,
+        entry_id: str,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -152,8 +169,41 @@ class DooyaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=UPDATE_INTERVAL,
         )
         self.controller = controller
+        self._entry_id = entry_id
+        self._device_name = name
         self._consecutive_errors = 0
         self._max_consecutive_errors = 5  # Allow more retries before failing
+        self._boost_deadline = 0.0
+
+    @callback
+    def async_boost_polling(self) -> None:
+        """Poll quickly for a short window after a movement command."""
+        self._boost_deadline = self.hass.loop.time() + MOVEMENT_BOOST_SECONDS
+        self.update_interval = MOVING_UPDATE_INTERVAL
+
+    def _next_interval(self, motor_status: int | None) -> timedelta:
+        """Choose the polling interval based on movement and boost window."""
+        moving = motor_status in (MOTOR_STATUS_OPENING, MOTOR_STATUS_CLOSING)
+        if moving or self.hass.loop.time() < self._boost_deadline:
+            return MOVING_UPDATE_INTERVAL
+        return UPDATE_INTERVAL
+
+    @callback
+    def _async_update_stroke_issue(self, stroke_set: bool | None) -> None:
+        """Raise or clear the 'stroke not set' repair issue."""
+        issue_id = _stroke_issue_id(self._entry_id)
+        if stroke_set is False:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="stroke_not_set",
+                translation_placeholders={"name": self._device_name},
+            )
+        elif stroke_set is True:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from the device."""
@@ -182,6 +232,10 @@ class DooyaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._consecutive_errors > 0:
                 _LOGGER.info("Connection restored after %d failed attempts", self._consecutive_errors)
             self._consecutive_errors = 0
+
+            # Poll faster while moving; raise/clear the calibration repair issue.
+            self.update_interval = self._next_interval(data.get("motor_status"))
+            self._async_update_stroke_issue(data.get("stroke_set"))
 
             return data
 

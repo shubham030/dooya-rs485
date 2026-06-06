@@ -17,12 +17,14 @@
 
 ## Features
 
-- 🎛️ Control Dooya curtain motors (open, close, stop)
+- 🎛️ Control Dooya curtain motors (open, close, stop, toggle)
 - 📍 Set specific positions (0-100%)
-- 📊 Read motor status and position in real-time
-- 🔄 Monitor switch and handle status
+- 📊 Live position and motor status (opening / closing / stopped)
+- ⚙️ Expose device configuration (direction, hand-pull, switch types)
 - 🔧 Program device addresses
 - 🏠 Support for multiple curtains
+- 🏃 Smooth position tracking — polls faster while the motor is moving
+- 🩹 Guided calibration via a Home Assistant repair issue when the stroke isn't set
 - 🔁 Automatic connection recovery and retry logic
 - ⚡ Efficient polling with Home Assistant DataUpdateCoordinator
 - 🔄 Auto-restart on failure (ConfigEntryNotReady)
@@ -115,6 +117,7 @@ All standard Home Assistant cover services are supported:
 - `cover.close_cover` - Close the curtain fully
 - `cover.stop_cover` - Stop the curtain at its current position
 - `cover.set_cover_position` - Move the curtain to a specific position (0-100)
+- `cover.toggle` - Toggle open/close using the motor's native negate command (`0x0F`)
 
 ## Attributes
 
@@ -158,11 +161,14 @@ The integration includes automatic recovery features:
 
 ### Position Shows "Unknown" or 0xFF
 
-This usually means the motor's stroke (travel limits) hasn't been set:
+This usually means the motor's stroke (travel limits) hasn't been set. When this
+happens a **repair issue** appears under **Settings → System → Repairs** guiding
+you through calibration:
 
 1. Use the test script or Home Assistant to fully **open** the curtain
 2. Then fully **close** the curtain
-3. The stroke should now be calibrated and position will report 0-100%
+3. The stroke should now be calibrated, position will report 0-100%, and the
+   repair issue clears automatically
 
 ### Communication Errors
 

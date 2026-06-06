@@ -62,5 +62,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "stroke_not_set": {
+      "title": "Curtain travel limits not set",
+      "description": "The Dooya motor for \"{name}\" reports that its stroke (travel limits) has not been calibrated, so position control is unavailable. To fix: fully open the curtain, then fully close it (using the open/close controls or the physical buttons). Position reporting will then work from 0-100% and this issue will clear automatically."
+    }
   }
 }
